@@ -62,6 +62,7 @@ if command -v create-dmg >/dev/null 2>&1; then
         --window-pos 200 120 \
         --window-size 600 400 \
         --icon-size 100 \
+        --volicon "$ROOT_DIR/scripts/AppIcon.icns" \
         --icon "$APP_NAME.app" 150 190 \
         --hide-extension "$APP_NAME.app" \
         --app-drop-link 450 190 \
