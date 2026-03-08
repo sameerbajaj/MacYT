@@ -22,19 +22,24 @@ final class UpdaterController {
         isChecking = true
         defer { isChecking = false }
 
-        let update = await UpdateChecker.check()
-
-        guard let update else {
+        switch await UpdateChecker.check() {
+        case .updateAvailable(let update):
+            presentUpdateAlert(for: update)
+        case .upToDate:
             if userInitiated {
                 showAlert(
                     title: "MacYT is Up to Date",
                     message: "No newer GitHub release was found."
                 )
             }
-            return
+        case .failed(let message):
+            if userInitiated {
+                showAlert(
+                    title: "Update Check Failed",
+                    message: message
+                )
+            }
         }
-
-        presentUpdateAlert(for: update)
     }
 
     private func presentUpdateAlert(for update: UpdateInfo) {

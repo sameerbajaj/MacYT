@@ -10,11 +10,17 @@ struct UpdateInfo {
     let publishedAt: TimeInterval?
 }
 
+enum UpdateCheckResult {
+    case updateAvailable(UpdateInfo)
+    case upToDate
+    case failed(String)
+}
+
 enum UpdateChecker {
     static let githubRepo = "sameerbajaj/MacYT"
     static let releasesPage = URL(string: "https://github.com/\(githubRepo)/releases")!
 
-    static func check() async -> UpdateInfo? {
+    static func check() async -> UpdateCheckResult {
         let apiURL = URL(string: "https://api.github.com/repos/\(githubRepo)/releases")!
         var request = URLRequest(url: apiURL)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -22,44 +28,65 @@ enum UpdateChecker {
         request.setValue("MacYT", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 10
 
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
-              let releases = try? JSONDecoder().decode([GitHubRelease].self, from: data) else {
-            return nil
-        }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
 
-        if let newest = releases.first(where: { !$0.draft && !$0.prerelease && $0.tagName != "latest" }) {
-            let remoteVersion = normalise(newest.tagName)
-            let localVersion = normalise(currentVersion)
-            if isNewer(remoteVersion, than: localVersion) {
-                return UpdateInfo(
-                    version: remoteVersion,
-                    tagName: newest.tagName,
-                    releaseURL: URL(string: newest.htmlURL) ?? releasesPage,
-                    downloadURL: preferredDMGURL(in: newest),
-                    releaseNotes: newest.body,
-                    isRolling: false,
-                    publishedAt: newest.publishedAt
-                )
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .failed("GitHub returned an invalid response.")
             }
-        }
 
-        if let latest = releases.first(where: { $0.tagName == "latest" }),
-           let publishedAt = latest.publishedAt {
-            let baseline = max(buildTimestamp, lastInstalledRollingTimestamp)
-            if baseline > 0 && publishedAt > baseline + 60 {
-                return UpdateInfo(
-                    version: "latest",
-                    tagName: "latest",
-                    releaseURL: URL(string: latest.htmlURL) ?? releasesPage,
-                    downloadURL: preferredDMGURL(in: latest),
-                    releaseNotes: latest.body,
-                    isRolling: true,
-                    publishedAt: publishedAt
-                )
+            if httpResponse.statusCode == 404 {
+                return .failed("The GitHub releases endpoint returned 404. The repository is likely private or the releases are not publicly accessible.")
             }
-        }
 
-        return nil
+            guard (200...299).contains(httpResponse.statusCode) else {
+                return .failed("GitHub returned HTTP \(httpResponse.statusCode) while checking releases.")
+            }
+
+            guard let releases = try? JSONDecoder().decode([GitHubRelease].self, from: data) else {
+                return .failed("MacYT could not decode the GitHub releases response.")
+            }
+
+            if let newest = releases.first(where: { !$0.draft && !$0.prerelease && $0.tagName != "latest" }) {
+                let remoteVersion = normalise(newest.tagName)
+                let localVersion = normalise(currentVersion)
+                if isNewer(remoteVersion, than: localVersion) {
+                    return .updateAvailable(
+                        UpdateInfo(
+                            version: remoteVersion,
+                            tagName: newest.tagName,
+                            releaseURL: URL(string: newest.htmlURL) ?? releasesPage,
+                            downloadURL: preferredDMGURL(in: newest),
+                            releaseNotes: newest.body,
+                            isRolling: false,
+                            publishedAt: newest.publishedAt
+                        )
+                    )
+                }
+            }
+
+            if let latest = releases.first(where: { $0.tagName == "latest" }),
+               let publishedAt = latest.publishedAt {
+                let baseline = max(buildTimestamp, lastInstalledRollingTimestamp)
+                if baseline > 0 && publishedAt > baseline + 60 {
+                    return .updateAvailable(
+                        UpdateInfo(
+                            version: "latest",
+                            tagName: "latest",
+                            releaseURL: URL(string: latest.htmlURL) ?? releasesPage,
+                            downloadURL: preferredDMGURL(in: latest),
+                            releaseNotes: latest.body,
+                            isRolling: true,
+                            publishedAt: publishedAt
+                        )
+                    )
+                }
+            }
+
+            return .upToDate
+        } catch {
+            return .failed(error.localizedDescription)
+        }
     }
 
     static var currentVersion: String {
