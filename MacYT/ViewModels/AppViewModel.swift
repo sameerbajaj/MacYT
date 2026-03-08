@@ -128,6 +128,26 @@ class AppViewModel: ObservableObject {
         downloadManager.cancelDownload()
         appState = .showingFormats
     }
+
+    func refreshSelectionForCurrentMode() {
+        guard !formats.isEmpty else {
+            selectedFormatId = nil
+            return
+        }
+
+        if downloadOptions.extractAudio {
+            selectedFormatId = nil
+            return
+        }
+
+        if let selectedFormatId,
+           let selected = formats.first(where: { $0.formatId == selectedFormatId }),
+           !selected.isAudioOnly {
+            return
+        }
+
+        selectedFormatId = defaultFormatID()
+    }
     
     func reset() {
         urlText = ""
@@ -163,15 +183,7 @@ class AppViewModel: ObservableObject {
         guard !formats.isEmpty else { return selectedFormatId }
 
         if downloadOptions.extractAudio {
-            if let selectedFormatId,
-               let selected = formats.first(where: { $0.formatId == selectedFormatId }),
-               selected.hasAudio {
-                return selected.formatId
-            }
-
-            return formats.first(where: { $0.isAudioOnly })?.formatId
-                ?? formats.first(where: { $0.hasAudio })?.formatId
-                ?? selectedFormatId
+            return nil
         }
 
         if let selectedFormatId,

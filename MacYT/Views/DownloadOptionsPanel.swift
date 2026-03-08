@@ -8,72 +8,14 @@ struct DownloadOptionsPanel: View {
             MacYTSectionHeading(
                 eyebrow: "Control booth",
                 title: "Export options",
-                subtitle: "Dial in metadata, subtitle handling, audio extraction, and output behavior before you commit the download."
+                subtitle: "Start with the kind of file you want, then adjust only the options that matter for that path."
             )
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
                     AudioExtractionView(options: options)
 
-                    SectionView(title: "Metadata & Info", icon: "tag.fill") {
-                        ControlToggleRow(title: "Embed Metadata", isOn: $options.embedMetadata)
-                        ControlToggleRow(title: "Embed Chapters", isOn: $options.embedChapters)
-                        ControlToggleRow(title: "Embed Thumbnail", isOn: $options.embedThumbnail)
-                    }
-
-                    SectionView(title: "Subtitles", icon: "captions.bubble.fill") {
-                        ControlToggleRow(title: "Write Subtitles (Subs)", isOn: $options.writeSubs)
-                        ControlToggleRow(title: "Auto-generated Subs", isOn: $options.writeAutoSubs)
-
-                        if options.writeSubs || options.writeAutoSubs {
-                            ControlPickerRow(title: "Language") {
-                                Picker("", selection: $options.subLanguage) {
-                                    Text("English (en)").tag("en")
-                                    Text("Spanish (es)").tag("es")
-                                    Text("French (fr)").tag("fr")
-                                    Text("German (de)").tag("de")
-                                    Text("Japanese (ja)").tag("ja")
-                                    Text("Korean (ko)").tag("ko")
-                                    Text("All").tag("all")
-                                }
-                                .labelsHidden()
-                                .frame(width: 130)
-                            }
-
-                            ControlToggleRow(title: "Convert Format", isOn: $options.convertSubsToEmber)
-
-                            if options.convertSubsToEmber {
-                                ControlPickerRow(title: "Target Format") {
-                                    Picker("Target Format", selection: $options.convertSubsFormat) {
-                                        Text("SRT").tag("srt")
-                                        Text("VTT").tag("vtt")
-                                        Text("ASS").tag("ass")
-                                    }
-                                    .labelsHidden()
-                                    .frame(width: 110)
-                                }
-                            }
-                        }
-                    }
-
-                    SectionView(title: "SponsorBlock", icon: "scissors.badge.ellipsis") {
-                        ControlToggleRow(title: "Enable SponsorBlock", isOn: $options.sponsorBlock)
-
-                        if options.sponsorBlock {
-                            ControlPickerRow(title: "Action") {
-                                Picker("Action", selection: $options.sponsorBlockAction) {
-                                    Text("Mark as Chapters").tag("mark")
-                                    Text("Remove Segments").tag("remove")
-                                }
-                                .labelsHidden()
-                                .frame(width: 150)
-                            }
-                        }
-                    }
-
-                    SectionView(title: "Output", icon: "shippingbox.fill") {
-                        ControlToggleRow(title: "Split by Chapters", isOn: $options.splitChapters)
-
+                    SectionView(title: "Save to", icon: "folder.fill") {
                         VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
                             Text("Output Directory")
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -105,6 +47,94 @@ struct DownloadOptionsPanel: View {
                             .macYTControlSurface()
                         }
                     }
+
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
+                            SectionView(title: "Metadata & Info", icon: "tag.fill") {
+                                ControlToggleRow(title: "Embed Metadata", isOn: $options.embedMetadata)
+                                ControlToggleRow(title: "Embed Chapters", isOn: $options.embedChapters)
+                                ControlToggleRow(title: "Embed Thumbnail", isOn: $options.embedThumbnail)
+                            }
+
+                            if !options.extractAudio {
+                                SectionView(title: "Subtitles", icon: "captions.bubble.fill") {
+                                    ControlToggleRow(title: "Write Subtitles", isOn: $options.writeSubs)
+                                    ControlToggleRow(title: "Auto-generated Subs", isOn: $options.writeAutoSubs)
+
+                                    if options.writeSubs || options.writeAutoSubs {
+                                        ControlPickerRow(title: "Language") {
+                                            Picker("", selection: $options.subLanguage) {
+                                                Text("English (en)").tag("en")
+                                                Text("Spanish (es)").tag("es")
+                                                Text("French (fr)").tag("fr")
+                                                Text("German (de)").tag("de")
+                                                Text("Japanese (ja)").tag("ja")
+                                                Text("Korean (ko)").tag("ko")
+                                                Text("All").tag("all")
+                                            }
+                                            .labelsHidden()
+                                            .frame(width: 130)
+                                        }
+
+                                        ControlToggleRow(title: "Convert Format", isOn: $options.convertSubsToEmber)
+
+                                        if options.convertSubsToEmber {
+                                            ControlPickerRow(title: "Target Format") {
+                                                Picker("Target Format", selection: $options.convertSubsFormat) {
+                                                    Text("SRT").tag("srt")
+                                                    Text("VTT").tag("vtt")
+                                                    Text("ASS").tag("ass")
+                                                }
+                                                .labelsHidden()
+                                                .frame(width: 110)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            SectionView(title: "Extras", icon: "slider.horizontal.3") {
+                                ControlToggleRow(title: "Enable SponsorBlock", isOn: $options.sponsorBlock)
+
+                                if options.sponsorBlock {
+                                    ControlPickerRow(title: "Action") {
+                                        Picker("Action", selection: $options.sponsorBlockAction) {
+                                            Text("Mark as Chapters").tag("mark")
+                                            Text("Remove Segments").tag("remove")
+                                        }
+                                        .labelsHidden()
+                                        .frame(width: 150)
+                                    }
+                                }
+
+                                ControlToggleRow(title: "Split by Chapters", isOn: $options.splitChapters)
+                            }
+                        }
+                        .padding(.top, MacYTSpacing.md)
+                    } label: {
+                        HStack(spacing: MacYTSpacing.sm) {
+                            Image(systemName: "gearshape.2.fill")
+                                .foregroundColor(MacYTColors.accentGradientEnd)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Advanced options")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundColor(MacYTColors.textPrimary)
+                                Text("Metadata, subtitles, cleanup, and chapter tools.")
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .foregroundColor(MacYTColors.textSecondary)
+                            }
+                        }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+                                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                        )
+                    }
+                    .tint(MacYTColors.textPrimary)
 
                     Spacer(minLength: 40)
                 }

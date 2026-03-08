@@ -66,7 +66,11 @@ struct MainAppView: View {
                         )
 
                         if viewModel.appState == .showingFormats || viewModel.appState == .downloading || viewModel.appState == .completed {
-                            FormatSelectionView(viewModel: viewModel)
+                            if viewModel.downloadOptions.extractAudio {
+                                AudioExportSummaryView(options: viewModel.downloadOptions)
+                            } else {
+                                FormatSelectionView(viewModel: viewModel)
+                            }
                         }
                     }
                     .padding(.bottom, 150)
@@ -86,6 +90,9 @@ struct MainAppView: View {
         }
         .padding(.horizontal, MacYTSpacing.xxl)
         .padding(.top, MacYTSpacing.xxl)
+        .onChange(of: viewModel.downloadOptions.extractAudio) { _, _ in
+            viewModel.refreshSelectionForCurrentMode()
+        }
         .overlay(
             VStack {
                 Spacer()
@@ -129,7 +136,7 @@ struct MainAppView: View {
 
             HStack(spacing: MacYTSpacing.sm) {
                 MacYTInfoChip(icon: "film.stack.fill", label: viewModel.videoInfo == nil ? "Awaiting link" : "Media loaded", tint: MacYTColors.accentGradientEnd)
-                MacYTInfoChip(icon: "waveform", label: viewModel.downloadOptions.extractAudio ? "Audio-first pipeline" : "Video-first pipeline")
+                MacYTInfoChip(icon: viewModel.downloadOptions.extractAudio ? "music.note" : "play.rectangle.fill", label: viewModel.downloadOptions.exportModeTitle)
                 MacYTInfoChip(icon: "folder.fill", label: viewModel.downloadOptions.outputDirectory.lastPathComponent)
             }
         }

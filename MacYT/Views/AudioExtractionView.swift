@@ -28,23 +28,26 @@ struct AudioExtractionView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: MacYTSpacing.sm) {
-                    Image(systemName: "music.note.list")
+                    Image(systemName: options.extractAudio ? "music.note.list" : "play.rectangle.fill")
                         .foregroundColor(MacYTColors.accentGradientEnd)
-                    Text("Audio extraction")
+                    Text("What are you saving?")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundColor(MacYTColors.textPrimary)
                 }
 
-                Text("Flip MacYT into an audio-first workflow when you only need the soundtrack, podcast track, or music rip.")
+                Text("Choose a simple export path first. Video keeps the picture. Audio grabs the best source track and converts it for you.")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundColor(MacYTColors.textSecondary)
             }
 
             Spacer()
 
-            Toggle("", isOn: $options.extractAudio)
-                .labelsHidden()
-                .toggleStyle(SwitchToggleStyle(tint: MacYTColors.accentGradientStart))
+            Picker("", selection: exportModeBinding) {
+                Text("Video").tag(false)
+                Text("Audio").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 170)
         }
     }
 
@@ -70,7 +73,14 @@ struct AudioExtractionView: View {
             }
             .macYTControlSurface()
 
-            qualityControls
+            bitrateControls
+
+            MacYTInlineBanner(
+                icon: "waveform.badge.magnifyingglass",
+                title: "No stream picking needed",
+                message: "MacYT will automatically grab the best available source audio, then convert it into your chosen format.",
+                tint: MacYTColors.accentGradientEnd
+            )
         }
         .padding()
         .background(
@@ -83,28 +93,43 @@ struct AudioExtractionView: View {
         )
     }
 
-    private var qualityControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Quality")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundColor(MacYTColors.textPrimary)
-                Spacer()
-                Text(options.audioQuality == 0 ? "Best (V0)" : "\(options.audioQuality)")
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundColor(MacYTColors.accentGradientEnd)
-            }
+    private var bitrateControls: some View {
+        VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
+            Text("Bitrate")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundColor(MacYTColors.textPrimary)
 
-            Slider(value: audioQualityBinding, in: 0...9, step: 1)
-                .tint(MacYTColors.accentGradientStart)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: MacYTSpacing.sm) {
+                ForEach(AudioBitratePreset.allCases) { preset in
+                    Button {
+                        options.audioBitrate = preset
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(preset.label)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(MacYTColors.textPrimary)
 
-            HStack {
-                Text("Best")
-                Spacer()
-                Text("Smallest")
+                            Text(preset.description)
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundColor(MacYTColors.textSecondary)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, MacYTSpacing.md)
+                        .padding(.vertical, MacYTSpacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: MacYTCornerRadius.medium, style: .continuous)
+                                .fill(options.audioBitrate == preset ? MacYTColors.accentGlow.opacity(0.22) : Color.white.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: MacYTCornerRadius.medium, style: .continuous)
+                                .stroke(options.audioBitrate == preset ? MacYTColors.accentGradientEnd.opacity(0.65) : Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .foregroundColor(MacYTColors.textTertiary)
         }
         .macYTControlSurface()
     }
@@ -112,16 +137,16 @@ struct AudioExtractionView: View {
     private var disabledBanner: some View {
         MacYTInlineBanner(
             icon: "film.fill",
-            title: "Video-first mode",
-            message: "You are currently set up to download video assets. Turn this on when you want audio-only exports instead.",
+            title: "Video mode",
+            message: "You will pick a video quality on the left, then download the final video without extra audio conversion settings getting in the way.",
             tint: MacYTColors.accentGradientEnd
         )
     }
 
-    private var audioQualityBinding: Binding<Double> {
+    private var exportModeBinding: Binding<Bool> {
         Binding(
-            get: { Double(options.audioQuality) },
-            set: { options.audioQuality = Int($0) }
+            get: { options.extractAudio },
+            set: { options.extractAudio = $0 }
         )
     }
 }

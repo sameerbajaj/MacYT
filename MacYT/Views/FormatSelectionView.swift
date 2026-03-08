@@ -2,42 +2,64 @@ import SwiftUI
 
 struct FormatSelectionView: View {
     @ObservedObject var viewModel: AppViewModel
-    @State private var filterMode: Int = 0 // 0: All, 1: Video Only, 2: Audio Only
+    @State private var showAdvancedStreams = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: MacYTSpacing.lg) {
             HStack(alignment: .top) {
                 MacYTSectionHeading(
                     eyebrow: "Formats",
-                    title: "Choose a stream profile",
-                    subtitle: "Pick a muxed export for the smoothest download, or drill into separate video-only and audio-only tracks when you need more control."
+                    title: "Choose video quality",
+                    subtitle: "Start with the clean, recommended video options. Only open the advanced list when you need technical stream variants."
                 )
 
                 Spacer(minLength: MacYTSpacing.lg)
 
-                Picker("", selection: $filterMode) {
-                    Text("Standard").tag(0)
-                    Text("Video Only").tag(1)
-                    Text("Audio Only").tag(2)
+                Button(showAdvancedStreams ? "Hide advanced" : "Show advanced") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showAdvancedStreams.toggle()
+                    }
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 280)
+                .buttonStyle(.plain)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundColor(MacYTColors.accentGradientEnd)
             }
 
-            if filteredFormats.isEmpty {
+            if recommendedFormats.isEmpty {
                 emptyState
             } else {
                 VStack(spacing: MacYTSpacing.sm) {
-                    headerRow
+                    recommendationBanner
 
                     ScrollView(showsIndicators: false) {
                         LazyVStack(spacing: MacYTSpacing.sm) {
-                            ForEach(filteredFormats) { format in
+                            ForEach(recommendedFormats) { format in
                                 FormatRow(
                                     format: format,
-                                    isSelected: viewModel.selectedFormatId == format.formatId
+                                    isSelected: viewModel.selectedFormatId == format.formatId,
+                                    emphasis: .recommended
                                 ) {
                                     viewModel.selectedFormatId = format.formatId
+                                }
+                            }
+
+                            if showAdvancedStreams && !advancedFormats.isEmpty {
+                                VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
+                                    Text("Advanced stream variants")
+                                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                                        .tracking(1.0)
+                                        .foregroundColor(MacYTColors.textTertiary)
+                                        .padding(.top, MacYTSpacing.md)
+
+                                    ForEach(advancedFormats) { format in
+                                        FormatRow(
+                                            format: format,
+                                            isSelected: viewModel.selectedFormatId == format.formatId,
+                                            emphasis: .technical
+                                        ) {
+                                            viewModel.selectedFormatId = format.formatId
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -51,37 +73,33 @@ struct FormatSelectionView: View {
         .macYTCard()
     }
 
-    private var filteredFormats: [VideoFormat] {
-        viewModel.formats.filter { format in
-            switch filterMode {
-            case 1:
-                return format.isVideoOnly
-            case 2:
-                return format.isAudioOnly
-            default:
-                return !format.isVideoOnly && !format.isAudioOnly
-            }
-        }
+    private var recommendedFormats: [VideoFormat] {
+        let muxed = viewModel.formats.filter { !$0.isAudioOnly && !$0.isVideoOnly }
+        let fallback = viewModel.formats.filter { !$0.isAudioOnly }
+        return preferredDisplayOrder(for: muxed.isEmpty ? fallback : muxed)
     }
 
-    private var headerRow: some View {
-        HStack {
-            Text("PROFILE")
-                .frame(maxWidth: .infinity, alignment: .leading)
+    private var advancedFormats: [VideoFormat] {
+        let recommendedIDs = Set(recommendedFormats.map(\ .formatId))
+        return preferredDisplayOrder(for: viewModel.formats.filter { !recommendedIDs.contains($0.formatId) && !$0.isAudioOnly })
+    }
 
-            Text("CODEC")
-                .frame(width: 140, alignment: .leading)
+    private var recommendationBanner: some View {
+        MacYTInlineBanner(
+            icon: "sparkles.tv.fill",
+            title: "Recommended for most downloads",
+            message: "These options already include audio when available, so you usually do not need to think about separate stream pieces.",
+            tint: MacYTColors.accentGradientEnd
+        )
+    }
 
-            Text("SIZE")
-                .frame(width: 90, alignment: .trailing)
-
-            Text("EXT")
-                .frame(width: 60, alignment: .trailing)
+    private func preferredDisplayOrder(for formats: [VideoFormat]) -> [VideoFormat] {
+        formats.sorted {
+            if ($0.height ?? 0) == ($1.height ?? 0) {
+                return ($0.tbr ?? 0) > ($1.tbr ?? 0)
+            }
+            return ($0.height ?? 0) > ($1.height ?? 0)
         }
-        .font(.system(size: 11, weight: .bold, design: .rounded))
-        .tracking(1.3)
-        .foregroundColor(MacYTColors.textTertiary)
-        .padding(.horizontal, MacYTSpacing.md)
     }
 
     private var emptyState: some View {
@@ -110,9 +128,15 @@ struct FormatSelectionView: View {
     }
 }
 
+private enum FormatRowEmphasis {
+    case recommended
+    case technical
+}
+
 private struct FormatRow: View {
     let format: VideoFormat
     let isSelected: Bool
+    let emphasis: FormatRowEmphasis
     let action: () -> Void
 
     var body: some View {
@@ -124,25 +148,33 @@ private struct FormatRow: View {
                             .font(.system(size: 15, weight: .bold, design: .rounded))
                             .foregroundColor(MacYTColors.textPrimary)
 
-                        if format.isVideoOnly {
+                        if emphasis == .recommended {
+                            capsule(label: format.isVideoOnly ? "Video only" : "Recommended", tint: format.isVideoOnly ? MacYTColors.warning : MacYTColors.success)
+                        } else if format.isVideoOnly {
                             capsule(label: "Video only", tint: MacYTColors.warning)
-                        } else if format.isAudioOnly {
-                            capsule(label: "Audio only", tint: MacYTColors.accentGradientEnd)
                         } else {
-                            capsule(label: "Muxed", tint: MacYTColors.success)
+                            capsule(label: "Technical", tint: MacYTColors.accentGradientEnd)
                         }
                     }
 
-                    Text(format.formatId)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundColor(MacYTColors.textTertiary)
+                    if emphasis == .recommended {
+                        Text(formatRecommendationText)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(MacYTColors.textSecondary)
+                    } else {
+                        Text("ID \(format.formatId) • \(format.displayCodec)")
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundColor(MacYTColors.textTertiary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(format.displayCodec)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundColor(MacYTColors.textSecondary)
-                    .frame(width: 140, alignment: .leading)
+                if emphasis == .technical {
+                    Text(format.displayCodec)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(MacYTColors.textSecondary)
+                        .frame(width: 140, alignment: .leading)
+                }
 
                 Text(format.humanFileSize)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -166,6 +198,16 @@ private struct FormatRow: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private var formatRecommendationText: String {
+        if format.isVideoOnly {
+            return "Needs a separate audio track during download"
+        }
+
+        let details = [format.ext.uppercased(), format.displayCodec, format.fps.map { "\(Int($0)) fps" }]
+            .compactMap { $0 }
+        return details.joined(separator: " • ")
     }
 
     private func capsule(label: String, tint: Color) -> some View {
