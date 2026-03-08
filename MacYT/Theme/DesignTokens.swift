@@ -2,23 +2,23 @@ import SwiftUI
 
 enum MacYTColors {
     static let background = Color(red: 11/255, green: 14/255, blue: 26/255)
-    static let backgroundSecondary = Color(red: 22/255, green: 28/255, blue: 48/255)
-    static let cardSurface = Color(red: 18/255, green: 24/255, blue: 41/255)
-    static let cardSurfaceHover = Color(red: 29/255, green: 36/255, blue: 61/255)
-    static let panelHighlight = Color.white.opacity(0.08)
+    static let backgroundSecondary = Color(red: 26/255, green: 33/255, blue: 57/255)
+    static let cardSurface = Color(red: 21/255, green: 27/255, blue: 47/255)
+    static let cardSurfaceHover = Color(red: 34/255, green: 42/255, blue: 72/255)
+    static let panelHighlight = Color.white.opacity(0.12)
     static let accentGradientStart = Color(red: 129/255, green: 99/255, blue: 255/255)
     static let accentGradientEnd = Color(red: 78/255, green: 194/255, blue: 255/255)
     static let accentGlow = Color(red: 118/255, green: 112/255, blue: 255/255)
 
     static let textPrimary = Color.white.opacity(0.96)
-    static let textSecondary = Color.white.opacity(0.64)
-    static let textTertiary = Color.white.opacity(0.42)
+    static let textSecondary = Color.white.opacity(0.78)
+    static let textTertiary = Color.white.opacity(0.58)
 
     static let success = Color(red: 48/255, green: 209/255, blue: 88/255)
     static let warning = Color(red: 1.0, green: 176/255, blue: 73/255)
     static let destructive = Color(red: 1.0, green: 98/255, blue: 109/255)
 
-    static let separator = Color.white.opacity(0.09)
+    static let separator = Color.white.opacity(0.12)
 }
 
 enum MacYTSpacing {
@@ -80,6 +80,20 @@ struct MacYTCardModifier: ViewModifier {
 extension View {
     func macYTCard() -> some View {
         modifier(MacYTCardModifier())
+    }
+
+    func macYTControlSurface() -> some View {
+        self
+            .padding(.horizontal, MacYTSpacing.md)
+            .padding(.vertical, MacYTSpacing.sm)
+            .background(
+                RoundedRectangle(cornerRadius: MacYTCornerRadius.medium, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: MacYTCornerRadius.medium, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
     }
 }
 

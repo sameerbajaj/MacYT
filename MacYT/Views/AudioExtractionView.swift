@@ -52,9 +52,11 @@ struct AudioExtractionView: View {
         VStack(alignment: .leading, spacing: MacYTSpacing.md) {
             HStack {
                 Text("Format")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundColor(MacYTColors.textSecondary)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(MacYTColors.textPrimary)
+
                 Spacer()
+
                 Picker("", selection: $options.audioFormat) {
                     Text("MP3").tag("mp3")
                     Text("M4A").tag("m4a")
@@ -63,8 +65,10 @@ struct AudioExtractionView: View {
                     Text("WAV").tag("wav")
                     Text("Opus").tag("opus")
                 }
+                .labelsHidden()
                 .frame(width: 110)
             }
+            .macYTControlSurface()
 
             qualityControls
         }
@@ -83,8 +87,8 @@ struct AudioExtractionView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Quality")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundColor(MacYTColors.textSecondary)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(MacYTColors.textPrimary)
                 Spacer()
                 Text(options.audioQuality == 0 ? "Best (V0)" : "\(options.audioQuality)")
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
@@ -102,6 +106,7 @@ struct AudioExtractionView: View {
             .font(.system(size: 11, weight: .semibold, design: .rounded))
             .foregroundColor(MacYTColors.textTertiary)
         }
+        .macYTControlSurface()
     }
 
     private var disabledBanner: some View {

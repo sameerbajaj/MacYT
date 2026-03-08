@@ -48,10 +48,13 @@ class AppViewModel: ObservableObject {
             return
         }
 
-        guard !urlText.isEmpty, let url = URL(string: urlText), url.scheme != nil else {
+        let sanitizedURL = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !sanitizedURL.isEmpty, let url = URL(string: sanitizedURL), url.scheme != nil else {
             errorMessage = "Invalid URL"
             return
         }
+        urlText = sanitizedURL
         
         errorMessage = nil
         appState = .fetchingInfo
@@ -60,7 +63,7 @@ class AppViewModel: ObservableObject {
         
         Task {
             do {
-                let info = try await ytdlpService.fetchVideoInfo(url: urlText)
+                let info = try await ytdlpService.fetchVideoInfo(url: sanitizedURL)
                 self.videoInfo = info
                 if let requestFormats = info.requestedFormats, !requestFormats.isEmpty {
                     var filtered = info.formats.filter { f in
@@ -84,7 +87,7 @@ class AppViewModel: ObservableObject {
     
     func pasteURL() {
         if let str = NSPasteboard.general.string(forType: .string) {
-            urlText = str
+            urlText = str.trimmingCharacters(in: .whitespacesAndNewlines)
             fetchVideoInfo()
         }
     }
