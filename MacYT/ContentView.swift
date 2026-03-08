@@ -128,10 +128,7 @@ struct MainAppView: View {
 
                 Spacer(minLength: MacYTSpacing.lg)
 
-                VStack(alignment: .trailing, spacing: MacYTSpacing.sm) {
-                    StatusBadge(status: checker.ytdlpStatus, name: "yt-dlp")
-                    StatusBadge(status: checker.ffmpegStatus, name: "FFmpeg")
-                }
+                dependencyStatusMenu
             }
 
             HStack(spacing: MacYTSpacing.sm) {
@@ -140,6 +137,67 @@ struct MainAppView: View {
                 MacYTInfoChip(icon: "folder.fill", label: viewModel.downloadOptions.outputDirectory.lastPathComponent)
             }
         }
+    }
+
+    private var dependencyStatusMenu: some View {
+        Menu {
+            Text("yt-dlp • \(checker.ytdlpStatus.title)")
+            Text("FFmpeg • \(checker.ffmpegStatus.title)")
+            Divider()
+            Button("Re-check tools") {
+                viewModel.recheckDeps()
+            }
+        } label: {
+            HStack(spacing: MacYTSpacing.sm) {
+                Circle()
+                    .fill(overallStatusColor)
+                    .frame(width: 9, height: 9)
+
+                Text(overallStatusTitle)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(MacYTColors.textPrimary)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(MacYTColors.textSecondary)
+            }
+            .padding(.horizontal, MacYTSpacing.lg)
+            .padding(.vertical, MacYTSpacing.md)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.05))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(overallStatusColor.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .buttonStyle(.plain)
+    }
+
+    private var overallStatusTitle: String {
+        if checker.allRequiredInstalled {
+            return "All systems ready"
+        }
+
+        if checker.coreDependencyInstalled {
+            return "1 tool needs attention"
+        }
+
+        return "Setup required"
+    }
+
+    private var overallStatusColor: Color {
+        if checker.allRequiredInstalled {
+            return MacYTColors.success
+        }
+
+        if checker.coreDependencyInstalled {
+            return MacYTColors.warning
+        }
+
+        return MacYTColors.destructive
     }
 }
 
