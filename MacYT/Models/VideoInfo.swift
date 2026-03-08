@@ -15,11 +15,35 @@ struct VideoInfo: Codable {
     
     let formats: [VideoFormat]
     let requestedFormats: [VideoFormat]?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case description
+        case thumbnail
+        case duration
+        case viewCount = "view_count"
+        case uploadDate = "upload_date"
+        case uploader
+        case uploaderUrl = "uploader_url"
+        case channel
+        case formats
+        case requestedFormats = "requested_formats"
+        case chapters
+        case subtitles
+        case automaticCaptions = "automatic_captions"
+    }
     
     struct Chapter: Codable {
-        let title: String
-        let startTime: Double
-        let endTime: Double
+        let title: String?
+        let startTime: Double?
+        let endTime: Double?
+
+        enum CodingKeys: String, CodingKey {
+            case title
+            case startTime = "start_time"
+            case endTime = "end_time"
+        }
     }
     let chapters: [Chapter]?
     
@@ -27,8 +51,8 @@ struct VideoInfo: Codable {
     let automaticCaptions: [String: [Subtitle]]?
     
     struct Subtitle: Codable {
-        let url: String
-        let ext: String
+        let url: String?
+        let ext: String?
         let protocolName: String?
         
         enum CodingKeys: String, CodingKey {
