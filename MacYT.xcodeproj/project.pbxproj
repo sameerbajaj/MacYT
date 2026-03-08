@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		7A31F6A12FD0001000A0B001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 7A31F6A02FD0001000A0B001 /* Sparkle */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		2F178BAC2F5D7FCB00B284B9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -56,7 +52,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7A31F6A12FD0001000A0B001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -117,7 +112,6 @@
 			);
 			name = MacYT;
 			packageProductDependencies = (
-				7A31F6A02FD0001000A0B001 /* Sparkle */,
 			);
 			productName = MacYT;
 			productReference = 2F178B9E2F5D7FC900B284B9 /* MacYT.app */;
@@ -205,9 +199,6 @@
 			productRefGroup = 2F178B9F2F5D7FC900B284B9 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			packageReferences = (
-				7A31F6A22FD0001000A0B001 /* XCRemoteSwiftPackageReference "Sparkle" */,
-			);
 			targets = (
 				2F178B9D2F5D7FC900B284B9 /* MacYT */,
 				2F178BAA2F5D7FCB00B284B9 /* MacYTTests */,
@@ -413,10 +404,6 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_SUAllowsAutomaticUpdates = YES;
-				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
-				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/sameerbajaj/MacYT/main/appcast.xml";
-				INFOPLIST_KEY_SUPublicEDKey = TODO_SET_SPARKLE_PUBLIC_KEY;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -449,10 +436,6 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_SUAllowsAutomaticUpdates = YES;
-				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
-				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/sameerbajaj/MacYT/main/appcast.xml";
-				INFOPLIST_KEY_SUPublicEDKey = TODO_SET_SPARKLE_PUBLIC_KEY;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -589,26 +572,8 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		7A31F6A22FD0001000A0B001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.6.4;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		7A31F6A02FD0001000A0B001 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 7A31F6A22FD0001000A0B001 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2F178B962F5D7FC900B284B9 /* Project object */;
 }

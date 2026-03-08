@@ -1,44 +1,48 @@
 # Self-updates for MacYT
 
-MacYT now has app-side integration for Sparkle, which is the standard macOS in-app auto-update framework.
+MacYT now follows the same general update model as CodexAccounts:
+
+- GitHub Actions builds the DMG
+- GitHub Releases hosts the DMG
+- the app checks GitHub Releases directly
+- the app downloads the DMG, swaps the `.app`, then relaunches
 
 ## What this is called
 
-This update model is usually called an in-app auto-updater or Sparkle-based self-updating.
+This is a custom GitHub Releases self-updater.
 
-## What is already wired in
+It is not Sparkle-based.
 
-- Sparkle is linked into the app.
-- The app includes a `Check for Updates…` menu command.
-- Automatic update checks are enabled through Info.plist build settings.
-- The feed URL is set to:
-  - `https://raw.githubusercontent.com/sameerbajaj/MacYT/main/appcast.xml`
+## How it works
 
-## What still needs one-time setup
+### Stable releases
 
-### 1. Add the Sparkle public key
+- Push a tag like `v1.2.0`
+- Publish the GitHub Release
+- Actions builds `MacYT-v1.2.0.dmg`
+- MacYT compares the newest stable release tag against its current version
 
-Replace `TODO_SET_SPARKLE_PUBLIC_KEY` in the target build settings with your Sparkle `SUPublicEDKey`.
+### Rolling latest builds
 
-### 2. Create signing keys
+- Every push to `main` rebuilds the app
+- Actions refreshes a pre-release tag named `latest`
+- The app compares the release `published_at` timestamp against its stamped build timestamp
+- If newer, it offers to install automatically
 
-Use Sparkle's `generate_keys` tool once on your release machine.
+## App-side behavior
 
-### 3. Publish signed release archives
+- MacYT checks for updates on launch
+- MacYT also exposes `Check for Updates…` in the app menu
+- If an update is found, MacYT can install it directly from GitHub and relaunch
 
-Each release needs a signed archive, typically a zip created from `MacYT.app`.
+## Files involved
 
-### 4. Generate and publish `appcast.xml`
-
-Use Sparkle's `generate_appcast` tool so the app can discover the latest signed release.
+- [MacYT/Services/UpdateChecker.swift](MacYT/Services/UpdateChecker.swift)
+- [MacYT/Services/SelfUpdater.swift](MacYT/Services/SelfUpdater.swift)
+- [MacYT/Services/UpdaterController.swift](MacYT/Services/UpdaterController.swift)
+- [.github/workflows/release.yml](.github/workflows/release.yml)
+- [scripts/create_dmg.sh](scripts/create_dmg.sh)
 
 ## Important note
 
-A normal Git push by itself is not enough for macOS self-updates. The updater needs:
-
-1. A built app archive
-2. A Sparkle signature
-3. An updated `appcast.xml`
-4. A reachable download URL for the archive
-
-If you want fully automated releases, the next step is adding a GitHub Actions workflow that builds the app, signs the archive, updates `appcast.xml`, and pushes or publishes the result on release/tag creation.
+For rolling updates to work correctly, CI stamps `CFBundleVersion` with a Unix timestamp. That timestamp is what the app compares against GitHub's `published_at` value for the `latest` pre-release.

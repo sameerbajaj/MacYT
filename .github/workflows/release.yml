@@ -1,59 +1,85 @@
-name: Build and Release macOS App
+name: Build and Upload DMG
 
 on:
   push:
-    tags:
-      - 'v*' # Trigger on version tags, e.g., v1.0.0
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  build-dmg:
     runs-on: macos-latest
-    
+
+    env:
+      APP_NAME: MacYT
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Select Xcode Version
-      run: sudo xcode-select -switch /Applications/Xcode_15.4.app
-      
-    - name: Build App
-      run: |
-        xcodebuild -project MacYT.xcodeproj -scheme MacYT -configuration Release clean build SYMROOT="$(PWD)/build"
-        
-    - name: Create DMG using hdiutil
-      run: |
-        # Wait until build exists
-        APP_PATH="build/Release/MacYT.app"
-        DMG_NAME="MacYT-${{ github.ref_name }}.dmg"
-        
-        # Install create-dmg via brew
-        brew install create-dmg
-        
-        create-dmg \
-          --volname "MacYT" \
-          --volicon "$APP_PATH/Contents/Resources/AppIcon.icns" \
-          --window-pos 200 120 \
-          --window-size 600 400 \
-          --icon-size 100 \
-          --icon "MacYT.app" 150 190 \
-          --hide-extension "MacYT.app" \
-          --app-drop-link 450 190 \
-          "build/$DMG_NAME" \
-          "$APP_PATH"
-          
-    - name: Generate Sparkle Signature (Optional)
-      run: |
-        # If using Sparkle, generate EdDSA signature here using generate_appcast
-        # Requires $SPARKLE_PRIVATE_KEY secret
-        # ./Sparkle/bin/sign_update build/MacYT-${{ github.ref_name }}.dmg
-        echo "Requires Sparkle setup to generate signature"
-        
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: build/MacYT-${{ github.ref_name }}.dmg
-        name: Release ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set DMG version suffix
+        id: vars
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+            echo "version_suffix=$TAG" >> "$GITHUB_OUTPUT"
+            echo "target_tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "marketing_version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "display_version=$TAG" >> "$GITHUB_OUTPUT"
+          else
+            git fetch --force --tags >/dev/null 2>&1 || true
+            LATEST_STABLE_TAG="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)"
+
+            if [[ -n "$LATEST_STABLE_TAG" ]]; then
+              BASE="${LATEST_STABLE_TAG#v}"
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+            else
+              MAJOR=1
+              MINOR=0
+            fi
+
+            PUSH_VERSION="${MAJOR}.${MINOR}.${GITHUB_RUN_NUMBER}"
+            echo "version_suffix=latest" >> "$GITHUB_OUTPUT"
+            echo "target_tag=latest" >> "$GITHUB_OUTPUT"
+            echo "marketing_version=$PUSH_VERSION" >> "$GITHUB_OUTPUT"
+            echo "display_version=v$PUSH_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install DMG builder
+        run: brew install create-dmg
+
+      - name: Build DMG
+        run: |
+          chmod +x scripts/create_dmg.sh
+          scripts/create_dmg.sh "${{ steps.vars.outputs.version_suffix }}" "${{ steps.vars.outputs.marketing_version }}"
+
+      - name: Recreate rolling latest pre-release
+        if: github.event_name != 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes 2>/dev/null || true
+          sleep 2
+          NOTES=$(cat <<EOF
+          Auto-updated DMG from the latest push to main.
+
+          Version: ${{ steps.vars.outputs.display_version }}
+          Commit: ${{ github.sha }}
+          EOF
+          )
+          gh release create latest \
+            --title "Latest build (${{ steps.vars.outputs.display_version }})" \
+            --prerelease \
+            --notes "$NOTES"
+
+      - name: Upload DMG to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.vars.outputs.target_tag }}
+        run: |
+          gh release upload "$TAG_NAME" "dist/$APP_NAME-${{ steps.vars.outputs.version_suffix }}.dmg" --clobber

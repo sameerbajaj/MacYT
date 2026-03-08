@@ -7,9 +7,8 @@ struct UpdaterCommands: Commands {
         CommandGroup(after: .appInfo) {
             Divider()
             Button("Check for Updates…") {
-                updaterController.checkForUpdates()
+                updaterController.checkForUpdatesFromMenu()
             }
-            .disabled(!updaterController.isConfigured)
         }
     }
 }
