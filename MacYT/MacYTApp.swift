@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct MacYTApp: App {
+    private let updaterController = UpdaterController()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -10,5 +12,8 @@ struct MacYTApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
+        .commands {
+            UpdaterCommands(updaterController: updaterController)
+        }
     }
 }

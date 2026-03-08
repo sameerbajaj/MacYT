@@ -3,9 +3,19 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var viewModel = AppViewModel()
     
+    private var shouldShowDependencyScreen: Bool {
+        if case .checkingDeps = viewModel.appState {
+            return true
+        }
+        if case .checkingError = viewModel.appState {
+            return true
+        }
+        return false
+    }
+    
     var body: some View {
         Group {
-            if viewModel.appState == .checkingDeps || viewModel.appState == .checkingError("") {
+            if shouldShowDependencyScreen {
                 DependencyStatusView(viewModel: viewModel)
             } else {
                 MainAppView(viewModel: viewModel)

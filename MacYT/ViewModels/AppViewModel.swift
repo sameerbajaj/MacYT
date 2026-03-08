@@ -28,11 +28,7 @@ class AppViewModel: ObservableObject {
     init() {
         Task {
             await DependencyChecker.shared.checkAll()
-            if !DependencyChecker.shared.ytdlpStatus.isInstalled {
-                appState = .checkingError("yt-dlp missing or broken")
-            } else {
-                appState = .ready
-            }
+            updateAppStateAfterDependencyCheck()
         }
     }
     
@@ -40,15 +36,18 @@ class AppViewModel: ObservableObject {
         appState = .checkingDeps
         Task {
             await DependencyChecker.shared.checkAll()
-            if !DependencyChecker.shared.ytdlpStatus.isInstalled {
-                appState = .checkingError("yt-dlp missing or broken")
-            } else {
-                appState = .ready
-            }
+            updateAppStateAfterDependencyCheck()
         }
     }
     
     func fetchVideoInfo() {
+        guard DependencyChecker.shared.allRequiredInstalled else {
+            let message = DependencyChecker.shared.unresolvedDependenciesDescription
+            errorMessage = message
+            appState = .checkingError(message)
+            return
+        }
+
         guard !urlText.isEmpty, let url = URL(string: urlText), url.scheme != nil else {
             errorMessage = "Invalid URL"
             return
@@ -73,8 +72,7 @@ class AppViewModel: ObservableObject {
                     self.formats = info.formats.sorted { ($0.tbr ?? 0) > ($1.tbr ?? 0) }
                 }
                 
-                // Select best default
-                self.selectedFormatId = self.formats.first?.formatId
+                self.selectedFormatId = self.defaultFormatID()
                 self.appState = .showingFormats
                 
             } catch {
@@ -92,13 +90,21 @@ class AppViewModel: ObservableObject {
     }
     
     func startDownload() {
+        guard DependencyChecker.shared.allRequiredInstalled else {
+            let message = DependencyChecker.shared.unresolvedDependenciesDescription
+            errorMessage = message
+            appState = .checkingError(message)
+            return
+        }
+
         guard !urlText.isEmpty else { return }
         
         appState = .downloading
         errorMessage = nil
+        let formatId = effectiveFormatIdForCurrentMode()
         
         Task {
-            await downloadManager.startDownload(url: urlText, formatId: selectedFormatId, options: downloadOptions)
+            await downloadManager.startDownload(url: urlText, formatId: formatId, options: downloadOptions)
              
             if case .completed = downloadManager.status {
                 appState = .completed
@@ -122,5 +128,51 @@ class AppViewModel: ObservableObject {
         errorMessage = nil
         appState = .ready
         downloadManager.status = .idle
+    }
+
+    private func updateAppStateAfterDependencyCheck() {
+        if DependencyChecker.shared.allRequiredInstalled {
+            appState = .ready
+        } else {
+            appState = .checkingError(DependencyChecker.shared.unresolvedDependenciesDescription)
+        }
+    }
+
+    private func defaultFormatID() -> String? {
+        if downloadOptions.extractAudio {
+            return formats.first(where: { $0.isAudioOnly })?.formatId
+                ?? formats.first(where: { $0.hasAudio })?.formatId
+                ?? formats.first?.formatId
+        }
+
+        return formats.first(where: { !$0.isAudioOnly && !$0.isVideoOnly })?.formatId
+            ?? formats.first(where: { !$0.isAudioOnly })?.formatId
+            ?? formats.first?.formatId
+    }
+
+    private func effectiveFormatIdForCurrentMode() -> String? {
+        guard !formats.isEmpty else { return selectedFormatId }
+
+        if downloadOptions.extractAudio {
+            if let selectedFormatId,
+               let selected = formats.first(where: { $0.formatId == selectedFormatId }),
+               selected.hasAudio {
+                return selected.formatId
+            }
+
+            return formats.first(where: { $0.isAudioOnly })?.formatId
+                ?? formats.first(where: { $0.hasAudio })?.formatId
+                ?? selectedFormatId
+        }
+
+        if let selectedFormatId,
+           let selected = formats.first(where: { $0.formatId == selectedFormatId }),
+           !selected.isAudioOnly {
+            return selected.formatId
+        }
+
+        return formats.first(where: { !$0.isAudioOnly && !$0.isVideoOnly })?.formatId
+            ?? formats.first(where: { !$0.isAudioOnly })?.formatId
+            ?? selectedFormatId
     }
 }

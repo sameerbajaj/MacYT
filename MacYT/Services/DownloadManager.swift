@@ -24,6 +24,11 @@ class DownloadManager: ObservableObject {
         self.consoleLogs.removeAll()
         
         var args = options.commandLineFlags()
+        if let ffmpegPath = DependencyChecker.shared.installedPath(for: "ffmpeg") {
+            let ffmpegDirectory = URL(fileURLWithPath: ffmpegPath).deletingLastPathComponent().path
+            args.insert(contentsOf: ["--ffmpeg-location", ffmpegDirectory], at: 0)
+        }
+
         if let fm = formatId {
             args.append(contentsOf: ["-f", fm])
         } else if !options.extractAudio {
@@ -37,9 +42,13 @@ class DownloadManager: ObservableObject {
         process = Process()
         process?.executableURL = URL(fileURLWithPath: path)
         process?.arguments = args
-        // Inject ffmpeg path so yt-dlp uses the correct broken check
         var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        let existingPathComponents = (env["PATH"] ?? "")
+            .split(separator: ":")
+            .map(String.init)
+        env["PATH"] = Array(NSOrderedSet(array: DependencyChecker.shared.preferredExecutableDirectories() + existingPathComponents))
+            .compactMap { $0 as? String }
+            .joined(separator: ":")
         process?.environment = env
         
         let pipe = Pipe()

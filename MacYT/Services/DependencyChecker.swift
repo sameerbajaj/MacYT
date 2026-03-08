@@ -20,6 +20,28 @@ class DependencyChecker: ObservableObject {
     @Published var ffmpegStatus: DependencyStatus = .checking
     
     private init() {}
+
+    var allRequiredInstalled: Bool {
+        ytdlpStatus.isInstalled && ffmpegStatus.isInstalled
+    }
+
+    var unresolvedDependenciesDescription: String {
+        var missing: [String] = []
+
+        if !ytdlpStatus.isInstalled {
+            missing.append("yt-dlp")
+        }
+
+        if !ffmpegStatus.isInstalled {
+            missing.append("FFmpeg")
+        }
+
+        if missing.isEmpty {
+            return "All dependencies are installed."
+        }
+
+        return "Missing or broken: \(missing.joined(separator: ", "))"
+    }
     
     @MainActor
     func checkAll() async {
@@ -36,32 +58,8 @@ class DependencyChecker: ObservableObject {
     }
     
     func check(executable: String) async -> DependencyStatus {
-        let process = Process()
-        let pipe = Pipe()
-        
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", "which \(executable)"]
-        
-        var path = ""
-        var defaultPath = "/opt/homebrew/bin/\(executable)" // fallback
-        
-        process.standardOutput = pipe
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        } catch {
-            // Error running shell which
-            path = ""
-        }
-        
-        if path.isEmpty {
-            if FileManager.default.fileExists(atPath: defaultPath) {
-                path = defaultPath
-            } else {
-                return .missing
-            }
+        guard let path = resolveExecutablePath(for: executable) else {
+            return .missing
         }
         
         // Check version to see if it's broken
@@ -105,10 +103,87 @@ class DependencyChecker: ObservableObject {
     }
     
     func getExecutablePath(for executable: String) -> String {
+        installedPath(for: executable)
+            ?? resolveExecutablePath(for: executable)
+            ?? "/opt/homebrew/bin/\(executable)"
+    }
+
+    func installedPath(for executable: String) -> String? {
         let status = executable == "yt-dlp" ? ytdlpStatus : ffmpegStatus
         if case .installed(let path, _) = status {
             return path
         }
-        return "/opt/homebrew/bin/\(executable)"
+        return nil
+    }
+
+    func preferredExecutableDirectories() -> [String] {
+        let installedDirectories = [installedPath(for: "yt-dlp"), installedPath(for: "ffmpeg")]
+            .compactMap { $0 }
+            .map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
+
+        let fallbackDirectories = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin").path,
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MacYT/bin").path
+        ]
+
+        return uniquePaths(installedDirectories + fallbackDirectories)
+    }
+
+    private func resolveExecutablePath(for executable: String) -> String? {
+        for candidate in candidatePaths(for: executable) where FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+
+        return nil
+    }
+
+    private func candidatePaths(for executable: String) -> [String] {
+        let fileManager = FileManager.default
+        let homeDirectory = fileManager.homeDirectoryForCurrentUser
+        let environmentPaths = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map(String.init)
+            .map { URL(fileURLWithPath: $0).appendingPathComponent(executable).path }
+
+        var candidates = environmentPaths
+        candidates.append(contentsOf: [
+            "/opt/homebrew/bin/\(executable)",
+            "/usr/local/bin/\(executable)",
+            "/usr/bin/\(executable)",
+            homeDirectory.appendingPathComponent(".local/bin/\(executable)").path,
+            homeDirectory.appendingPathComponent("Library/Application Support/MacYT/bin/\(executable)").path
+        ])
+
+        if let resourceURL = Bundle.main.resourceURL {
+            candidates.append(resourceURL.appendingPathComponent("bin/\(executable)").path)
+        }
+
+        candidates.append(contentsOf: pythonUserBinCandidates(for: executable))
+
+        return uniquePaths(candidates)
+    }
+
+    private func pythonUserBinCandidates(for executable: String) -> [String] {
+        let root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Python")
+
+        guard let versionDirectories = try? FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return versionDirectories.map {
+            $0.appendingPathComponent("bin/\(executable)").path
+        }
+    }
+
+    private func uniquePaths(_ paths: [String]) -> [String] {
+        Array(NSOrderedSet(array: paths.filter { !$0.isEmpty }))
+            .compactMap { $0 as? String }
     }
 }
