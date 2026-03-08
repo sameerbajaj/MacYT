@@ -41,8 +41,8 @@ class AppViewModel: ObservableObject {
     }
     
     func fetchVideoInfo() {
-        guard DependencyChecker.shared.allRequiredInstalled else {
-            let message = DependencyChecker.shared.unresolvedDependenciesDescription
+        guard DependencyChecker.shared.coreDependencyInstalled else {
+            let message = "yt-dlp is required before MacYT can fetch video information."
             errorMessage = message
             appState = .checkingError(message)
             return
@@ -90,10 +90,16 @@ class AppViewModel: ObservableObject {
     }
     
     func startDownload() {
-        guard DependencyChecker.shared.allRequiredInstalled else {
-            let message = DependencyChecker.shared.unresolvedDependenciesDescription
+        guard DependencyChecker.shared.coreDependencyInstalled else {
+            let message = "yt-dlp is required before you can start a download."
             errorMessage = message
             appState = .checkingError(message)
+            return
+        }
+
+        guard DependencyChecker.shared.ffmpegStatus.isInstalled else {
+            errorMessage = DependencyChecker.shared.ffmpegWarningText
+            appState = .showingFormats
             return
         }
 
@@ -131,10 +137,10 @@ class AppViewModel: ObservableObject {
     }
 
     private func updateAppStateAfterDependencyCheck() {
-        if DependencyChecker.shared.allRequiredInstalled {
+        if DependencyChecker.shared.coreDependencyInstalled {
             appState = .ready
         } else {
-            appState = .checkingError(DependencyChecker.shared.unresolvedDependenciesDescription)
+            appState = .checkingError("yt-dlp is required to launch MacYT. Install or repair it, then re-check.")
         }
     }
 

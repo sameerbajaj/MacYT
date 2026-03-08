@@ -4,21 +4,24 @@ struct DownloadOptionsPanel: View {
     @ObservedObject var options: DownloadOptions
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
-                
-                // Audio Extraction
+        VStack(alignment: .leading, spacing: MacYTSpacing.lg) {
+            MacYTSectionHeading(
+                eyebrow: "Control booth",
+                title: "Export options",
+                subtitle: "Dial in metadata, subtitle handling, audio extraction, and output behavior before you commit the download."
+            )
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
                 AudioExtractionView(options: options)
-                
-                // Metadata
-                SectionView(title: "Metadata & Info") {
+
+                    SectionView(title: "Metadata & Info", icon: "tag.fill") {
                     Toggle("Embed Metadata", isOn: $options.embedMetadata)
                     Toggle("Embed Chapters", isOn: $options.embedChapters)
                     Toggle("Embed Thumbnail", isOn: $options.embedThumbnail)
                 }
-                
-                // Subtitles
-                SectionView(title: "Subtitles") {
+
+                    SectionView(title: "Subtitles", icon: "captions.bubble.fill") {
                     Toggle("Write Subtitles (Subs)", isOn: $options.writeSubs)
                     Toggle("Auto-generated Subs", isOn: $options.writeAutoSubs)
                     
@@ -48,9 +51,8 @@ struct DownloadOptionsPanel: View {
                         }
                     }
                 }
-                
-                // SponsorBlock
-                SectionView(title: "SponsorBlock") {
+
+                    SectionView(title: "SponsorBlock", icon: "scissors.badge.ellipsis") {
                     Toggle("Enable SponsorBlock", isOn: $options.sponsorBlock)
                     if options.sponsorBlock {
                         Picker("Action", selection: $options.sponsorBlockAction) {
@@ -59,9 +61,8 @@ struct DownloadOptionsPanel: View {
                         }
                     }
                 }
-                
-                // Output
-                SectionView(title: "Output") {
+
+                    SectionView(title: "Output", icon: "shippingbox.fill") {
                     Toggle("Split by Chapters", isOn: $options.splitChapters)
                     
                     VStack(alignment: .leading) {
@@ -85,42 +86,52 @@ struct DownloadOptionsPanel: View {
                                     options.outputDirectory = url
                                 }
                             }
+                            .buttonStyle(.plain)
+                            .foregroundColor(MacYTColors.accentGradientEnd)
                         }
                     }
                 }
-                
-                Spacer(minLength: 40)
+
+                    Spacer(minLength: 40)
+                }
+                .toggleStyle(SwitchToggleStyle(tint: MacYTColors.accentGradientStart))
             }
-            .padding()
-            .toggleStyle(SwitchToggleStyle(tint: MacYTColors.accentGradientStart))
+            .padding(.top, 2)
         }
-        .frame(width: 280)
-        .background(Color(NSColor.windowBackgroundColor))
-        .overlay(
-            Rectangle()
-                .fill(MacYTColors.separator)
-                .frame(width: 0.5), alignment: .leading
-        )
+        .padding(MacYTSpacing.xl)
+        .frame(width: 340)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .macYTCard()
     }
 }
 
 private struct SectionView<Content: View>: View {
     let title: String
+    let icon: String
     @ViewBuilder let content: () -> Content
     
     var body: some View {
         VStack(alignment: .leading, spacing: MacYTSpacing.md) {
-            Text(title)
-                .font(.headline)
-                .foregroundColor(MacYTColors.textPrimary)
+            HStack(spacing: MacYTSpacing.sm) {
+                Image(systemName: icon)
+                    .foregroundColor(MacYTColors.accentGradientEnd)
+                Text(title)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(MacYTColors.textPrimary)
+            }
             
             VStack(alignment: .leading, spacing: MacYTSpacing.md) {
                 content()
             }
             .padding()
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(MacYTCornerRadius.large)
-            .shadow(color: Color.black.opacity(0.02), radius: 2, y: 1)
+            .background(
+                RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            )
         }
     }
 }

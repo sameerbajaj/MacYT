@@ -3,83 +3,141 @@ import SwiftUI
 struct VideoInfoCard: View {
     let info: VideoInfo?
     let isLoading: Bool
-    
+
     var body: some View {
-        HStack(alignment: .top, spacing: MacYTSpacing.lg) {
-            if isLoading {
-                SkeletonThumbnail()
-                SkeletonMetadata()
-            } else if let video = info {
-                if let urlString = video.thumbnail, let url = URL(string: urlString) {
-                    AsyncImage(url: url) { phase in
-                        if let image = phase.image {
-                            image
-                                .resizable()
-                                .aspectRatio(16/9, contentMode: .fit)
-                        } else if phase.error != nil {
-                            Rectangle().fill(Color.gray.opacity(0.3)).aspectRatio(16/9, contentMode: .fit)
-                        } else {
-                            SkeletonThumbnail()
+        VStack(alignment: .leading, spacing: MacYTSpacing.lg) {
+            MacYTSectionHeading(
+                eyebrow: "Preview",
+                title: info == nil ? "Media slate" : "Loaded media snapshot",
+                subtitle: info == nil
+                    ? "Once you inspect a URL, its artwork, publisher, runtime, and available output profile will appear here."
+                    : "Review the source before choosing a stream or exporting an audio-first version."
+            )
+
+            HStack(alignment: .top, spacing: MacYTSpacing.xl) {
+                if isLoading {
+                    SkeletonThumbnail()
+                    SkeletonMetadata()
+                } else if let video = info {
+                    thumbnail(for: video)
+
+                    VStack(alignment: .leading, spacing: MacYTSpacing.md) {
+                        Text(video.title)
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundColor(MacYTColors.textPrimary)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+
+                        HStack(spacing: 10) {
+                            Image(systemName: "person.crop.square.fill")
+                            Text(video.channel ?? video.uploader ?? "Unknown publisher")
+                        }
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundColor(MacYTColors.accentGradientEnd)
+
+                        if let description = video.description, !description.isEmpty {
+                            Text(description)
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundColor(MacYTColors.textSecondary)
+                                .lineLimit(4)
+                        }
+
+                        HStack(spacing: MacYTSpacing.sm) {
+                            MacYTInfoChip(icon: "clock.fill", label: video.durationString.isEmpty ? "Unknown length" : video.durationString, tint: MacYTColors.textPrimary)
+                            MacYTInfoChip(icon: "eye.fill", label: video.viewCountString)
+                            MacYTInfoChip(icon: "rectangle.stack.fill.badge.play", label: "\(video.formats.count) formats")
+                        }
+
+                        if let uploadDate = video.uploadDate, !uploadDate.isEmpty {
+                            Text("Published · \(uploadDate)")
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundColor(MacYTColors.textTertiary)
                         }
                     }
-                    .frame(width: 180)
-                    .cornerRadius(MacYTCornerRadius.medium)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    Rectangle().fill(Color.gray.opacity(0.3)).aspectRatio(16/9, contentMode: .fit)
-                        .frame(width: 180)
-                        .cornerRadius(MacYTCornerRadius.medium)
+                    emptyState
                 }
-                
-                VStack(alignment: .leading, spacing: MacYTSpacing.xs) {
-                    Text(video.title)
-                        .font(.headline)
-                        .foregroundColor(MacYTColors.textPrimary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: "person.circle.fill")
-                        Text(video.channel ?? video.uploader ?? "Unknown Channel")
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(MacYTColors.accentGradientStart)
-                    .padding(.top, 4)
-                    
-                    HStack(spacing: MacYTSpacing.md) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock")
-                            Text(video.durationString)
-                        }
-                        
-                        HStack(spacing: 4) {
-                            Image(systemName: "eye")
-                            Text(video.viewCountString)
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundColor(MacYTColors.textSecondary)
-                    .padding(.top, 8)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                Text("Enter a URL and click Fetch")
-                    .foregroundColor(MacYTColors.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .padding(MacYTSpacing.lg)
+        .padding(MacYTSpacing.xl)
         .macYTCard()
-        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func thumbnail(for video: VideoInfo) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            if let urlString = video.thumbnail, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image
+                            .resizable()
+                            .aspectRatio(16 / 9, contentMode: .fill)
+                    } else if phase.error != nil {
+                        Rectangle().fill(Color.white.opacity(0.08))
+                    } else {
+                        SkeletonThumbnail()
+                    }
+                }
+            } else {
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+            }
+
+            LinearGradient(
+                colors: [.clear, Color.black.opacity(0.72)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            HStack(spacing: MacYTSpacing.sm) {
+                Image(systemName: "play.rectangle.fill")
+                Text(video.durationString.isEmpty ? "Preview ready" : video.durationString)
+            }
+            .font(.system(size: 12, weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+        }
+        .frame(width: 280, height: 158)
+        .clipShape(RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: MacYTSpacing.md) {
+            Image(systemName: "sparkles.tv.fill")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(MacYTColors.accentGradientEnd)
+
+            Text("No media loaded yet")
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundColor(MacYTColors.textPrimary)
+
+            Text("Paste a link above to load the channel, title, artwork, and the format matrix for that video.")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundColor(MacYTColors.textSecondary)
+                .frame(maxWidth: 420, alignment: .leading)
+
+            HStack(spacing: MacYTSpacing.sm) {
+                MacYTInfoChip(icon: "highlighter", label: "Format breakdown")
+                MacYTInfoChip(icon: "music.note.house.fill", label: "Audio extraction")
+                MacYTInfoChip(icon: "folder.badge.gearshape", label: "Export controls")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private struct SkeletonThumbnail: View {
     var body: some View {
         Rectangle()
-            .fill(Color.gray.opacity(0.1))
-            .aspectRatio(16/9, contentMode: .fit)
-            .frame(width: 180)
-            .cornerRadius(MacYTCornerRadius.medium)
+            .fill(Color.white.opacity(0.08))
+            .frame(width: 280, height: 158)
+            .cornerRadius(MacYTCornerRadius.large)
             .shimmerEffect()
     }
 }
@@ -87,15 +145,16 @@ private struct SkeletonThumbnail: View {
 private struct SkeletonMetadata: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MacYTSpacing.md) {
-            Rectangle().fill(Color.gray.opacity(0.1)).frame(height: 20).cornerRadius(4)
-            Rectangle().fill(Color.gray.opacity(0.1)).frame(height: 20).padding(.trailing, 40).cornerRadius(4)
-            
-            Rectangle().fill(Color.gray.opacity(0.1)).frame(width: 120, height: 16).cornerRadius(4).padding(.top, 8)
-            
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 24).cornerRadius(8)
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 24).padding(.trailing, 40).cornerRadius(8)
+
+            Rectangle().fill(Color.white.opacity(0.08)).frame(width: 170, height: 18).cornerRadius(6).padding(.top, 8)
+
             HStack {
-                Rectangle().fill(Color.gray.opacity(0.1)).frame(width: 60, height: 14).cornerRadius(4)
-                Rectangle().fill(Color.gray.opacity(0.1)).frame(width: 80, height: 14).cornerRadius(4)
-            }.padding(.top, 4)
+                Rectangle().fill(Color.white.opacity(0.08)).frame(width: 90, height: 34).cornerRadius(17)
+                Rectangle().fill(Color.white.opacity(0.08)).frame(width: 110, height: 34).cornerRadius(17)
+            }
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .shimmerEffect()

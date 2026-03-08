@@ -8,6 +8,9 @@ struct DownloadProgressView: View {
             switch viewModel.downloadManager.status {
             case .idle, .cancelled:
                 HStack {
+                    Text("Ready to export")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(MacYTColors.textSecondary)
                     Spacer()
                     GradientButton(
                         title: "Download \(viewModel.downloadOptions.extractAudio ? "Audio" : "Video")",
@@ -16,7 +19,7 @@ struct DownloadProgressView: View {
                     ) {
                         viewModel.startDownload()
                     }
-                    .frame(height: 44)
+                    .frame(height: 50)
                 }
                 
             case .fetching:
@@ -33,14 +36,20 @@ struct DownloadProgressView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(MacYTColors.success)
                         .font(.title2)
-                    Text("Download Completed")
-                        .font(.headline)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Download completed")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(MacYTColors.textPrimary)
+                        Text(path)
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundColor(MacYTColors.textTertiary)
+                    }
                     Spacer()
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: viewModel.downloadOptions.outputDirectory.path)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(MacYTColors.accentGradientStart)
+                    .buttonStyle(.plain)
+                    .foregroundColor(MacYTColors.accentGradientEnd)
                     
                     Button("New Download") {
                         viewModel.reset()
@@ -49,7 +58,7 @@ struct DownloadProgressView: View {
                     .padding(.horizontal, MacYTSpacing.md)
                 }
                 .padding()
-                .background(MacYTColors.success.opacity(0.1))
+                .background(MacYTColors.success.opacity(0.12))
                 .cornerRadius(MacYTCornerRadius.large)
                 
             case .failed(let error):
@@ -59,18 +68,18 @@ struct DownloadProgressView: View {
                         .font(.title2)
                     VStack(alignment: .leading) {
                         Text("Download Failed")
-                            .font(.headline)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(MacYTColors.textPrimary)
                         Text(error)
-                            .font(.caption)
-                            .foregroundColor(MacYTColors.destructive)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(MacYTColors.destructive.opacity(0.92))
                             .lineLimit(2)
                     }
                     Spacer()
-                    Button("Retry") {
+                    GradientButton(title: "Retry", icon: "arrow.clockwise", isLoading: false) {
                         viewModel.startDownload()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(MacYTColors.accentGradientStart)
+                    .frame(height: 46)
                 }
                 .padding()
                 .background(MacYTColors.destructive.opacity(0.1))
@@ -88,6 +97,13 @@ struct DownloadProgressView: View {
                 }
             }
         }
+        .padding(MacYTSpacing.lg)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: MacYTCornerRadius.xLarge, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: MacYTCornerRadius.xLarge, style: .continuous)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.28), radius: 18, y: 12)
     }
 }
 
@@ -101,11 +117,12 @@ private struct ProgressRow: View {
         VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
             HStack {
                 Text(title)
-                    .font(.headline)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(MacYTColors.textPrimary)
                 Spacer()
                 if let p = progress {
                     Text("\(Int(p * 100))%")
-                        .font(.headline)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundColor(MacYTColors.accentGradientStart)
                 }
             }
@@ -113,7 +130,7 @@ private struct ProgressRow: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color(NSColor.windowBackgroundColor))
+                        .fill(Color.white.opacity(0.08))
                         .frame(height: 12)
                     
                     if let p = progress {
@@ -146,23 +163,23 @@ private struct ProgressRow: View {
             HStack {
                 if !speed.isEmpty {
                     Text("Speed: \(speed)")
-                        .font(.caption)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundColor(MacYTColors.textSecondary)
                 }
                 Spacer()
                 if !eta.isEmpty {
                     Text("ETA: \(eta)")
-                        .font(.caption)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundColor(MacYTColors.textSecondary)
                 }
             }
         }
         .padding()
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(Color.white.opacity(0.04))
         .cornerRadius(MacYTCornerRadius.large)
         .overlay(
             RoundedRectangle(cornerRadius: MacYTCornerRadius.large)
-                .stroke(MacYTColors.separator, lineWidth: 0.5)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
         )
     }
 }

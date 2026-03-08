@@ -20,23 +20,48 @@ struct GradientButton: View {
                     Image(systemName: icon)
                 }
                 Text(title)
-                    .fontWeight(.medium)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
             }
-            .padding(.horizontal, MacYTSpacing.lg)
-            .padding(.vertical, MacYTSpacing.sm)
-            .frame(minWidth: 100)
+            .padding(.horizontal, MacYTSpacing.xl)
+            .padding(.vertical, MacYTSpacing.md)
+            .frame(minWidth: 120)
             .background(
-                LinearGradient(
-                    colors: [MacYTColors.accentGradientStart, MacYTColors.accentGradientEnd],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                ZStack {
+                    LinearGradient(
+                        colors: [MacYTColors.accentGradientStart, MacYTColors.accentGradientEnd],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.22), Color.clear],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
             )
             .foregroundColor(.white)
-            .clipShape(RoundedRectangle(cornerRadius: MacYTCornerRadius.medium))
-            .shadow(color: MacYTColors.accentGradientStart.opacity(isHovered ? 0.4 : 0.2), radius: isHovered ? 6 : 3, y: 2)
-            .scaleEffect(isHovered ? 1.02 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovered)
+            .clipShape(RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous))
+            .shadow(
+                color: MacYTColors.accentGlow.opacity(isHovered ? 0.48 : 0.28),
+                radius: isHovered ? 16 : 10,
+                y: isHovered ? 10 : 6
+            )
+            .scaleEffect(isHovered ? 1.015 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+                    .fill(Color.white.opacity(0.12))
+                    .frame(height: 1)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 1)
+            }
         }
         .buttonStyle(.plain)
         .onHover { hovered in

@@ -11,6 +11,41 @@ enum DependencyStatus: Equatable {
         if case .installed = self { return true }
         return false
     }
+
+    var isBroken: Bool {
+        if case .broken = self { return true }
+        return false
+    }
+
+    var title: String {
+        switch self {
+        case .installed:
+            return "Ready"
+        case .broken:
+            return "Broken"
+        case .missing:
+            return "Missing"
+        case .checking:
+            return "Scanning"
+        }
+    }
+
+    var detail: String? {
+        switch self {
+        case .installed(let path, let version):
+            return [version, path]
+                .filter { !$0.isEmpty }
+                .joined(separator: " • ")
+        case .broken(let path, let error):
+            return [path, error]
+                .filter { !$0.isEmpty }
+                .joined(separator: " • ")
+        case .missing:
+            return nil
+        case .checking:
+            return "Looking across Homebrew, system paths, and your login shell."
+        }
+    }
 }
 
 class DependencyChecker: ObservableObject {
@@ -21,26 +56,36 @@ class DependencyChecker: ObservableObject {
     
     private init() {}
 
+    var coreDependencyInstalled: Bool {
+        ytdlpStatus.isInstalled
+    }
+
     var allRequiredInstalled: Bool {
         ytdlpStatus.isInstalled && ffmpegStatus.isInstalled
     }
 
     var unresolvedDependenciesDescription: String {
-        var missing: [String] = []
+        let issues = [dependencySummary(name: "yt-dlp", status: ytdlpStatus), dependencySummary(name: "FFmpeg", status: ffmpegStatus)]
+            .compactMap { $0 }
 
-        if !ytdlpStatus.isInstalled {
-            missing.append("yt-dlp")
-        }
-
-        if !ffmpegStatus.isInstalled {
-            missing.append("FFmpeg")
-        }
-
-        if missing.isEmpty {
+        if issues.isEmpty {
             return "All dependencies are installed."
         }
 
-        return "Missing or broken: \(missing.joined(separator: ", "))"
+        return issues.joined(separator: " • ")
+    }
+
+    var ffmpegWarningText: String? {
+        switch ffmpegStatus {
+        case .installed:
+            return nil
+        case .checking:
+            return "Checking FFmpeg support…"
+        case .missing:
+            return "FFmpeg is optional for browsing formats, but downloads that need merging or audio extraction will stay unavailable until it is installed."
+        case .broken(_, let error):
+            return "FFmpeg was found, but macOS could not launch it. \(concise(error))"
+        }
     }
     
     @MainActor
@@ -61,44 +106,47 @@ class DependencyChecker: ObservableObject {
         guard let path = resolveExecutablePath(for: executable) else {
             return .missing
         }
-        
-        // Check version to see if it's broken
+
         let versionProcess = Process()
         let vPipe = Pipe()
         let vErrPipe = Pipe()
-        
+
         versionProcess.executableURL = URL(fileURLWithPath: path)
-        if executable == "yt-dlp" {
-            versionProcess.arguments = ["--version"]
-        } else {
-            versionProcess.arguments = ["-version"]
-        }
-        
+        versionProcess.arguments = versionArguments(for: executable)
         versionProcess.standardOutput = vPipe
         versionProcess.standardError = vErrPipe
-        
+        versionProcess.environment = launchEnvironment()
+
         do {
+            let stdoutTask = Task.detached(priority: .userInitiated) {
+                vPipe.fileHandleForReading.readDataToEndOfFile()
+            }
+            let stderrTask = Task.detached(priority: .userInitiated) {
+                vErrPipe.fileHandleForReading.readDataToEndOfFile()
+            }
+
             try versionProcess.run()
             versionProcess.waitUntilExit()
-            
-            let vData = vPipe.fileHandleForReading.readDataToEndOfFile()
-            let vErrData = vErrPipe.fileHandleForReading.readDataToEndOfFile()
-            
-            var output = String(data: vData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let errorOut = String(data: vErrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            
+
+            let vData = await stdoutTask.value
+            let vErrData = await stderrTask.value
+
+            let stdout = String(data: vData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let stderr = String(data: vErrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            var output = stdout.isEmpty ? stderr : stdout
+
             if versionProcess.terminationStatus != 0 {
-                return .broken(path: path, error: errorOut.isEmpty ? output : errorOut)
+                return .broken(path: path, error: diagnoseFailure(stdout: stdout, stderr: stderr))
             }
-            
+
             if executable == "ffmpeg" {
                 output = output.components(separatedBy: "\n").first ?? output
             }
-            
+
             return .installed(path: path, version: output)
-            
+
         } catch {
-            return .broken(path: path, error: error.localizedDescription)
+            return .broken(path: path, error: concise(error.localizedDescription))
         }
     }
     
@@ -133,8 +181,13 @@ class DependencyChecker: ObservableObject {
     }
 
     private func resolveExecutablePath(for executable: String) -> String? {
+        if let shellResolved = shellResolvedPath(for: executable),
+           FileManager.default.isExecutableFile(atPath: shellResolved) {
+            return URL(fileURLWithPath: shellResolved).resolvingSymlinksInPath().path
+        }
+
         for candidate in candidatePaths(for: executable) where FileManager.default.isExecutableFile(atPath: candidate) {
-            return candidate
+            return URL(fileURLWithPath: candidate).resolvingSymlinksInPath().path
         }
 
         return nil
@@ -143,7 +196,7 @@ class DependencyChecker: ObservableObject {
     private func candidatePaths(for executable: String) -> [String] {
         let fileManager = FileManager.default
         let homeDirectory = fileManager.homeDirectoryForCurrentUser
-        let environmentPaths = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+        let environmentPaths = launchEnvironment()["PATH", default: ""]
             .split(separator: ":")
             .map(String.init)
             .map { URL(fileURLWithPath: $0).appendingPathComponent(executable).path }
@@ -162,8 +215,111 @@ class DependencyChecker: ObservableObject {
         }
 
         candidates.append(contentsOf: pythonUserBinCandidates(for: executable))
+        candidates.append(contentsOf: homebrewOptCandidates(for: executable))
 
         return uniquePaths(candidates)
+    }
+
+    private func dependencySummary(name: String, status: DependencyStatus) -> String? {
+        switch status {
+        case .installed:
+            return nil
+        case .checking:
+            return "\(name) is still being checked."
+        case .missing:
+            return "\(name) is missing."
+        case .broken(_, let error):
+            return "\(name) is broken: \(concise(error))"
+        }
+    }
+
+    private func versionArguments(for executable: String) -> [String] {
+        executable == "yt-dlp" ? ["--version"] : ["-version"]
+    }
+
+    private func launchEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let existingPathComponents = (environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map(String.init)
+        environment["PATH"] = uniquePaths(preferredExecutableDirectories() + existingPathComponents)
+            .joined(separator: ":")
+        return environment
+    }
+
+    private func shellResolvedPath(for executable: String) -> String? {
+        let shellProcess = Process()
+        let pipe = Pipe()
+
+        shellProcess.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        shellProcess.arguments = ["-lc", "command -v \(shellEscaped(executable)) 2>/dev/null | head -n 1"]
+        shellProcess.standardOutput = pipe
+        shellProcess.standardError = Pipe()
+        shellProcess.environment = launchEnvironment()
+
+        do {
+            try shellProcess.run()
+            shellProcess.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard shellProcess.terminationStatus == 0, let output, !output.isEmpty else {
+                return nil
+            }
+
+            return output
+        } catch {
+            return nil
+        }
+    }
+
+    private func homebrewOptCandidates(for executable: String) -> [String] {
+        let formula = executable == "yt-dlp" ? "yt-dlp" : "ffmpeg"
+        return [
+            "/opt/homebrew/opt/\(formula)/bin/\(executable)",
+            "/usr/local/opt/\(formula)/bin/\(executable)"
+        ]
+    }
+
+    private func diagnoseFailure(stdout: String, stderr: String) -> String {
+        let combined = [stderr, stdout]
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+
+        if let missingLibrary = missingLibraryName(in: combined) {
+            return "Missing shared library: \(missingLibrary). Try repairing the related Homebrew package, then re-check."
+        }
+
+        return concise(combined)
+    }
+
+    private func missingLibraryName(in text: String) -> String? {
+        guard let libraryRange = text.range(of: "Library not loaded: ") else {
+            return nil
+        }
+
+        let suffix = text[libraryRange.upperBound...]
+        let line = suffix.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
+        return line.split(separator: "/").last.map(String.init)
+    }
+
+    private func concise(_ text: String) -> String {
+        let normalized = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "  +", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard normalized.count > 220 else {
+            return normalized
+        }
+
+        let index = normalized.index(normalized.startIndex, offsetBy: 217)
+        return String(normalized[..<index]) + "..."
+    }
+
+    private func shellEscaped(_ string: String) -> String {
+        "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private func pythonUserBinCandidates(for executable: String) -> [String] {

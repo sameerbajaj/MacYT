@@ -6,85 +6,151 @@ struct DependencyStatusView: View {
     
     var body: some View {
         VStack(spacing: MacYTSpacing.xl) {
-            Spacer()
-            
-            Image(systemName: "gearshape.2.fill")
-                .font(.system(size: 64))
-                .foregroundColor(MacYTColors.accentGradientStart)
-            
-            Text("Checking Requirements")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-            
-            VStack(alignment: .leading, spacing: MacYTSpacing.lg) {
-                StatusRow(name: "yt-dlp", status: checker.ytdlpStatus)
-                StatusRow(name: "FFmpeg", status: checker.ffmpegStatus)
-            }
-            .padding()
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(MacYTCornerRadius.large)
-            .shadow(color: Color.black.opacity(0.1), radius: 10, y: 5)
-            .frame(maxWidth: 500)
-            
-            if !checker.ytdlpStatus.isInstalled || !checker.ffmpegStatus.isInstalled {
+            Spacer(minLength: MacYTSpacing.xl)
+
+            VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("MacYT Diagnostics")
+                            .font(.system(size: 42, weight: .heavy, design: .rounded))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [MacYTColors.textPrimary, MacYTColors.accentGradientEnd],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+
+                        Text("Before the export studio opens, MacYT verifies the command-line tools it depends on. Right now the blocker is `yt-dlp`. FFmpeg is also checked here so you can diagnose it early.")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundColor(MacYTColors.textSecondary)
+                            .frame(maxWidth: 560, alignment: .leading)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "waveform.badge.magnifyingglass")
+                        .font(.system(size: 44, weight: .semibold))
+                        .foregroundColor(MacYTColors.accentGradientEnd)
+                        .padding(18)
+                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+
                 VStack(spacing: MacYTSpacing.md) {
-                    Text("You need `yt-dlp` and `ffmpeg` to use MacYT.")
-                        .foregroundColor(MacYTColors.textSecondary)
-                    
-                    HStack {
-                        Text("brew install yt-dlp ffmpeg")
-                            .font(.system(.body, design: .monospaced))
-                            .padding()
-                            .background(Color.black.opacity(0.5))
-                            .cornerRadius(MacYTCornerRadius.medium)
-                            .foregroundColor(.white)
-                        
+                    DependencyDiagnosticRow(name: "yt-dlp", status: checker.ytdlpStatus)
+                    DependencyDiagnosticRow(name: "FFmpeg", status: checker.ffmpegStatus)
+                }
+
+                if !checker.coreDependencyInstalled {
+                    MacYTInlineBanner(
+                        icon: "terminal.fill",
+                        title: "Install or repair the required tools",
+                        message: checker.unresolvedDependenciesDescription,
+                        tint: MacYTColors.warning
+                    )
+
+                    HStack(spacing: MacYTSpacing.md) {
+                        commandChip(command: "brew install yt-dlp ffmpeg")
+
                         Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString("brew install yt-dlp ffmpeg", forType: .string)
                         } label: {
-                            Image(systemName: "doc.on.clipboard")
+                            Image(systemName: "doc.on.clipboard.fill")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(MacYTColors.textPrimary)
+                                .frame(width: 48, height: 48)
+                                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
                         .buttonStyle(.plain)
-                        .padding()
-                        .background(MacYTColors.accentGradientStart)
-                        .cornerRadius(MacYTCornerRadius.medium)
-                        .foregroundColor(.white)
                     }
-                    
-                    Button("I've installed them, Re-check") {
+                }
+
+                HStack(spacing: MacYTSpacing.md) {
+                    GradientButton(
+                        title: viewModel.appState == .checkingDeps ? "Checking…" : "Re-check tools",
+                        icon: "arrow.clockwise",
+                        isLoading: viewModel.appState == .checkingDeps
+                    ) {
                         viewModel.recheckDeps()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(MacYTColors.accentGradientStart)
-                    .padding(.top, MacYTSpacing.md)
+
+                    if checker.ffmpegStatus.isBroken {
+                        commandChip(command: "brew upgrade ffmpeg x265")
+                    }
                 }
-            } else if viewModel.appState == .checkingDeps {
-                ProgressView()
-                    .padding(.top)
             }
-            
-            Spacer()
+            .padding(MacYTSpacing.xxxl)
+            .frame(maxWidth: 760)
+            .macYTCard()
+
+            Spacer(minLength: MacYTSpacing.xl)
         }
+        .padding(.horizontal, MacYTSpacing.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    private func commandChip(command: String) -> some View {
+        Text(command)
+            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+            .foregroundColor(MacYTColors.textPrimary)
+            .padding(.horizontal, MacYTSpacing.lg)
+            .padding(.vertical, MacYTSpacing.md)
+            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
     }
 }
 
-private struct StatusRow: View {
+private struct DependencyDiagnosticRow: View {
     let name: String
     let status: DependencyStatus
     
     var body: some View {
-        HStack {
-            Text(name)
-                .font(.headline)
-                .frame(width: 80, alignment: .leading)
-            
-            Spacer()
-            
-            StatusBadge(status: status, name: name)
+        VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(MacYTColors.textPrimary)
+
+                    Text(statusSummary)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundColor(MacYTColors.textSecondary)
+                }
+
+                Spacer()
+
+                StatusBadge(status: status, name: name)
+            }
+
+            if let detail = status.detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundColor(MacYTColors.textTertiary)
+                    .lineLimit(3)
+            }
         }
-        .padding(.vertical, 4)
+        .padding(MacYTSpacing.lg)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    private var statusSummary: String {
+        switch status {
+        case .installed:
+            return "Installed and ready to launch."
+        case .broken:
+            return "Found on disk, but macOS could not run it successfully."
+        case .missing:
+            return "Not found in Homebrew, system folders, or your login shell path."
+        case .checking:
+            return "Scanning common install locations now."
+        }
     }
 }
