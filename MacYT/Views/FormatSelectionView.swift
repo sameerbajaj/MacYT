@@ -65,7 +65,7 @@ struct FormatSelectionView: View {
                         }
                         .padding(.vertical, 4)
                     }
-                    .frame(minHeight: 220, maxHeight: 360)
+                    .frame(minHeight: 280, maxHeight: 520)
                 }
             }
         }

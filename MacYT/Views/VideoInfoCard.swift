@@ -14,54 +14,82 @@ struct VideoInfoCard: View {
                     : "Review the source before choosing a stream or exporting an audio-first version."
             )
 
-            HStack(alignment: .top, spacing: MacYTSpacing.xl) {
-                if isLoading {
-                    SkeletonThumbnail()
-                    SkeletonMetadata()
-                } else if let video = info {
-                    thumbnail(for: video)
-
-                    VStack(alignment: .leading, spacing: MacYTSpacing.md) {
-                        Text(video.title)
-                            .font(.system(size: 26, weight: .bold, design: .rounded))
-                            .foregroundColor(MacYTColors.textPrimary)
-                            .lineLimit(3)
-                            .multilineTextAlignment(.leading)
-
-                        HStack(spacing: 10) {
-                            Image(systemName: "person.crop.square.fill")
-                            Text(video.channel ?? video.uploader ?? "Unknown publisher")
-                        }
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundColor(MacYTColors.accentGradientEnd)
-
-                        if let description = video.description, !description.isEmpty {
-                            Text(description)
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                                .foregroundColor(MacYTColors.textSecondary)
-                                .lineLimit(4)
-                        }
-
-                        HStack(spacing: MacYTSpacing.sm) {
-                            MacYTInfoChip(icon: "clock.fill", label: video.durationString.isEmpty ? "Unknown length" : video.durationString, tint: MacYTColors.textPrimary)
-                            MacYTInfoChip(icon: "eye.fill", label: video.viewCountString)
-                            MacYTInfoChip(icon: "rectangle.stack.fill.badge.play", label: "\(video.formats.count) formats")
-                        }
-
-                        if let uploadDate = video.uploadDate, !uploadDate.isEmpty {
-                            Text("Published · \(uploadDate)")
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                .foregroundColor(MacYTColors.textTertiary)
-                        }
+            if isLoading {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: MacYTSpacing.xl) {
+                        SkeletonThumbnail()
+                        SkeletonMetadata()
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    emptyState
+
+                    VStack(alignment: .leading, spacing: MacYTSpacing.lg) {
+                        SkeletonThumbnail()
+                        SkeletonMetadata()
+                    }
                 }
+            } else if let video = info {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: MacYTSpacing.xl) {
+                        thumbnail(for: video)
+                        metadata(for: video)
+                    }
+
+                    VStack(alignment: .leading, spacing: MacYTSpacing.lg) {
+                        thumbnail(for: video)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        metadata(for: video)
+                    }
+                }
+            } else {
+                emptyState
             }
         }
         .padding(MacYTSpacing.xl)
         .macYTCard()
+    }
+
+    private func metadata(for video: VideoInfo) -> some View {
+        VStack(alignment: .leading, spacing: MacYTSpacing.md) {
+            Text(video.title)
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundColor(MacYTColors.textPrimary)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+
+            HStack(spacing: 10) {
+                Image(systemName: "person.crop.square.fill")
+                Text(video.channel ?? video.uploader ?? "Unknown publisher")
+            }
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .foregroundColor(MacYTColors.accentGradientEnd)
+
+            if let description = video.description, !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(MacYTColors.textSecondary)
+                    .lineLimit(5)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: MacYTSpacing.sm) {
+                    MacYTInfoChip(icon: "clock.fill", label: video.durationString.isEmpty ? "Unknown length" : video.durationString, tint: MacYTColors.textPrimary)
+                    MacYTInfoChip(icon: "eye.fill", label: video.viewCountString)
+                    MacYTInfoChip(icon: "rectangle.stack.fill.badge.play", label: "\(video.formats.count) formats")
+                }
+
+                VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
+                    MacYTInfoChip(icon: "clock.fill", label: video.durationString.isEmpty ? "Unknown length" : video.durationString, tint: MacYTColors.textPrimary)
+                    MacYTInfoChip(icon: "eye.fill", label: video.viewCountString)
+                    MacYTInfoChip(icon: "rectangle.stack.fill.badge.play", label: "\(video.formats.count) formats")
+                }
+            }
+
+            if let uploadDate = video.uploadDate, !uploadDate.isEmpty {
+                Text("Published · \(uploadDate)")
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundColor(MacYTColors.textTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -99,7 +127,7 @@ struct VideoInfoCard: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
         }
-        .frame(width: 280, height: 158)
+        .frame(width: 340, height: 192)
         .clipShape(RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
@@ -136,7 +164,7 @@ private struct SkeletonThumbnail: View {
     var body: some View {
         Rectangle()
             .fill(Color.white.opacity(0.08))
-            .frame(width: 280, height: 158)
+            .frame(width: 340, height: 192)
             .cornerRadius(MacYTCornerRadius.large)
             .shimmerEffect()
     }
