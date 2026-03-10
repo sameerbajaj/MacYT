@@ -31,43 +31,40 @@ struct FormatSelectionView: View {
                 VStack(spacing: MacYTSpacing.sm) {
                     recommendationBanner
 
-                    ScrollView(showsIndicators: false) {
-                        LazyVStack(spacing: MacYTSpacing.sm) {
-                            ForEach(recommendedFormats) { format in
-                                FormatRow(
-                                    format: format,
-                                    duration: viewModel.videoInfo?.duration,
-                                    isSelected: viewModel.selectedFormatId == format.formatId,
-                                    emphasis: .recommended
-                                ) {
-                                    viewModel.selectedFormatId = format.formatId
-                                }
+                    LazyVStack(spacing: MacYTSpacing.sm) {
+                        ForEach(recommendedFormats) { format in
+                            FormatRow(
+                                format: format,
+                                duration: viewModel.videoInfo?.duration,
+                                isSelected: viewModel.selectedFormatId == format.formatId,
+                                emphasis: .recommended
+                            ) {
+                                viewModel.selectedFormatId = format.formatId
                             }
+                        }
 
-                            if showAdvancedStreams && !advancedFormats.isEmpty {
-                                VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
-                                    Text("Advanced stream variants")
-                                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                                        .tracking(1.0)
-                                        .foregroundColor(MacYTColors.textTertiary)
-                                        .padding(.top, MacYTSpacing.md)
+                        if showAdvancedStreams && !advancedFormats.isEmpty {
+                            VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
+                                Text("Advanced stream variants")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    .tracking(1.0)
+                                    .foregroundColor(MacYTColors.textTertiary)
+                                    .padding(.top, MacYTSpacing.md)
 
-                                    ForEach(advancedFormats) { format in
-                                        FormatRow(
-                                            format: format,
-                                            duration: viewModel.videoInfo?.duration,
-                                            isSelected: viewModel.selectedFormatId == format.formatId,
-                                            emphasis: .technical
-                                        ) {
-                                            viewModel.selectedFormatId = format.formatId
-                                        }
+                                ForEach(advancedFormats) { format in
+                                    FormatRow(
+                                        format: format,
+                                        duration: viewModel.videoInfo?.duration,
+                                        isSelected: viewModel.selectedFormatId == format.formatId,
+                                        emphasis: .technical
+                                    ) {
+                                        viewModel.selectedFormatId = format.formatId
                                     }
                                 }
                             }
                         }
-                        .padding(.vertical, 4)
                     }
-                    .frame(minHeight: 280, maxHeight: 520)
+                    .padding(.vertical, 4)
                 }
             }
         }

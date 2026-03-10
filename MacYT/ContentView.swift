@@ -55,16 +55,6 @@ struct MainAppView: View {
             }
             .padding(.horizontal, MacYTSpacing.xxl)
             .padding(.vertical, MacYTSpacing.xl)
-            .overlay(alignment: .bottomTrailing) {
-                if viewModel.shouldShowFloatingDock {
-                    FloatingDownloadDock(
-                        viewModel: viewModel,
-                        selectedSection: $selectedSection
-                    )
-                    .padding(.trailing, MacYTSpacing.xxl)
-                    .padding(.bottom, MacYTSpacing.xl)
-                }
-            }
         }
         .onChange(of: viewModel.downloadOptions.extractAudio) { _, _ in
             viewModel.refreshSelectionForCurrentMode()
@@ -93,18 +83,21 @@ struct MainAppView: View {
 
                 if viewModel.showsFormatStage {
                     if viewModel.downloadOptions.extractAudio {
-                                AudioExportSummaryView(
-                                    options: viewModel.downloadOptions,
-                                    formats: viewModel.formats,
-                                    duration: viewModel.videoInfo?.duration
-                                )
+                        AudioExportSummaryView(
+                            options: viewModel.downloadOptions,
+                            formats: viewModel.formats,
+                            duration: viewModel.videoInfo?.duration
+                        )
                     } else {
                         FormatSelectionView(viewModel: viewModel)
                     }
+
+                    SimpleAdvancedOptionsView(options: viewModel.downloadOptions)
+                    studioActionCard
                 }
 
-                if viewModel.videoInfo != nil {
-                    studioNextStepCard
+                if viewModel.isDownloadActive || viewModel.appState == .completed {
+                    DownloadProgressView(viewModel: viewModel)
                 }
             }
             .padding(.bottom, 116)
@@ -123,27 +116,11 @@ struct MainAppView: View {
             VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
                 workspaceHero(
                     eyebrow: "Downloads",
-                    title: "A cleaner export desk.",
-                    subtitle: "All conversion controls, progress updates, and session logs now live in one calmer place instead of squeezing the preview screen."
+                    title: "Exported files",
+                    subtitle: "This tab only shows what is already downloaded. Configure and start new exports in Studio."
                 )
 
-                infoChips
-
-                notificationStack
-
-                if viewModel.videoInfo == nil {
-                    downloadsEmptyState
-                } else {
-                    HStack(alignment: .top, spacing: MacYTSpacing.xl) {
-                        DownloadOptionsPanel(options: viewModel.downloadOptions)
-
-                        VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
-                            DownloadDeskCard(viewModel: viewModel, selectedSection: $selectedSection)
-                            DownloadConsoleCard(viewModel: viewModel)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                    }
-                }
+                ExportedFilesView(directory: viewModel.downloadOptions.outputDirectory)
             }
             .padding(.bottom, 116)
         }
@@ -154,6 +131,33 @@ struct MainAppView: View {
                 endPoint: .bottom
             )
         )
+    }
+
+    private var studioActionCard: some View {
+        HStack(spacing: MacYTSpacing.lg) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Ready to export")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(MacYTColors.textPrimary)
+
+                Text("Mode: \(viewModel.downloadOptions.extractAudio ? "Audio" : "Video") • Output: \(viewModel.downloadOptions.outputDirectory.lastPathComponent)")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(MacYTColors.textSecondary)
+            }
+
+            Spacer(minLength: 0)
+
+            GradientButton(
+                title: "Download \(viewModel.downloadOptions.extractAudio ? "Audio" : "Video")",
+                icon: "arrow.down.circle.fill",
+                isLoading: viewModel.isDownloadActive
+            ) {
+                viewModel.startDownload()
+            }
+            .frame(height: 50)
+        }
+        .padding(MacYTSpacing.xl)
+        .macYTCard()
     }
 
     private var infoChips: some View {
@@ -357,7 +361,7 @@ private enum WorkspaceSection: String, CaseIterable, Identifiable {
         case .studio:
             return "Inspect links"
         case .downloads:
-            return "Export and monitor"
+            return "Previously exported"
         }
     }
 

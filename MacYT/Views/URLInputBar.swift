@@ -5,6 +5,28 @@ struct URLInputBar: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: MacYTSpacing.lg) {
+            VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
+                Text("OUTPUT")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(1.4)
+                    .foregroundColor(MacYTColors.accentGradientEnd)
+
+                HStack(spacing: MacYTSpacing.md) {
+                    Text("What do you want?")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(MacYTColors.textPrimary)
+
+                    Picker("Export mode", selection: $viewModel.downloadOptions.extractAudio) {
+                        Text("Video").tag(false)
+                        Text("Audio").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 220)
+
+                    Spacer(minLength: 0)
+                }
+            }
+
             VStack(alignment: .leading, spacing: 6) {
                 Text("CAPTURE")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
