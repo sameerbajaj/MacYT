@@ -36,6 +36,7 @@ struct FormatSelectionView: View {
                             ForEach(recommendedFormats) { format in
                                 FormatRow(
                                     format: format,
+                                    duration: viewModel.videoInfo?.duration,
                                     isSelected: viewModel.selectedFormatId == format.formatId,
                                     emphasis: .recommended
                                 ) {
@@ -54,6 +55,7 @@ struct FormatSelectionView: View {
                                     ForEach(advancedFormats) { format in
                                         FormatRow(
                                             format: format,
+                                            duration: viewModel.videoInfo?.duration,
                                             isSelected: viewModel.selectedFormatId == format.formatId,
                                             emphasis: .technical
                                         ) {
@@ -135,6 +137,7 @@ private enum FormatRowEmphasis {
 
 private struct FormatRow: View {
     let format: VideoFormat
+    let duration: Double?
     let isSelected: Bool
     let emphasis: FormatRowEmphasis
     let action: () -> Void
@@ -176,10 +179,10 @@ private struct FormatRow: View {
                         .frame(width: 140, alignment: .leading)
                 }
 
-                Text(format.humanFileSize)
+                Text(format.humanFileSize(duration: duration))
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundColor(MacYTColors.textSecondary)
-                    .frame(width: 90, alignment: .trailing)
+                    .frame(width: 110, alignment: .trailing)
 
                 Text(format.ext.uppercased())
                     .font(.system(size: 12, weight: .bold, design: .rounded))

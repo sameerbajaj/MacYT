@@ -43,11 +43,37 @@ struct VideoFormat: Codable, Identifiable {
     var sizeBytes: Int64? {
         filesize ?? filesizeApprox
     }
+
+    func estimatedSizeBytes(duration: Double?) -> Int64? {
+        if let sizeBytes {
+            return sizeBytes
+        }
+
+        guard let duration, duration > 0, let tbr, tbr > 0 else {
+            return nil
+        }
+
+        let bytes = duration * (tbr * 1000) / 8
+        return Int64(bytes.rounded())
+    }
     
     var humanFileSize: String {
         guard let size = sizeBytes else { return "Unknown" }
         let mb = Double(size) / 1024 / 1024
         return String(format: "%.1f MB", mb)
+    }
+
+    func humanFileSize(duration: Double?) -> String {
+        guard let size = estimatedSizeBytes(duration: duration) else { return "Unknown" }
+
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.countStyle = .file
+        formatter.includesUnit = true
+        formatter.isAdaptive = true
+
+        let label = formatter.string(fromByteCount: size)
+        return sizeBytes == nil ? "~\(label)" : label
     }
     
     var displayResolution: String {
@@ -66,5 +92,9 @@ struct VideoFormat: Codable, Identifiable {
             return acodec ?? "Unknown"
         }
         return vcodec ?? "Unknown"
+    }
+
+    var displayContainer: String {
+        ext.uppercased()
     }
 }

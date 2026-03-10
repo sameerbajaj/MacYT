@@ -93,7 +93,11 @@ struct MainAppView: View {
 
                 if viewModel.showsFormatStage {
                     if viewModel.downloadOptions.extractAudio {
-                        AudioExportSummaryView(options: viewModel.downloadOptions)
+                                AudioExportSummaryView(
+                                    options: viewModel.downloadOptions,
+                                    formats: viewModel.formats,
+                                    duration: viewModel.videoInfo?.duration
+                                )
                     } else {
                         FormatSelectionView(viewModel: viewModel)
                     }
@@ -374,91 +378,114 @@ private struct WorkspaceSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
-            VStack(alignment: .leading, spacing: MacYTSpacing.md) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [MacYTColors.accentGradientStart.opacity(0.95), MacYTColors.accentGradientEnd.opacity(0.95)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 58, height: 58)
-
-                    Image(systemName: "play.tv.fill")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.white)
-                }
-
-                Text("MacYT")
-                    .font(.system(size: 24, weight: .heavy, design: .rounded))
-                    .foregroundColor(MacYTColors.textPrimary)
-
-                Text("A two-room workflow for previewing first and exporting second.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundColor(MacYTColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(spacing: MacYTSpacing.md) {
-                ForEach(WorkspaceSection.allCases) { section in
-                    Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                            selectedSection = section
-                        }
-                    } label: {
-                        HStack(spacing: MacYTSpacing.md) {
-                            Image(systemName: section.icon)
-                                .font(.system(size: 15, weight: .bold))
-                                .frame(width: 34, height: 34)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(section == selectedSection ? Color.white.opacity(0.16) : Color.white.opacity(0.05))
-                                )
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(section.title)
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                                Text(section.subtitle)
-                                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                                    .foregroundColor(MacYTColors.textSecondary)
-                            }
-
-                            Spacer(minLength: 0)
-                        }
-                        .foregroundColor(MacYTColors.textPrimary)
-                        .padding(MacYTSpacing.md)
-                        .background(
-                            RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
-                                .fill(section == selectedSection ? MacYTColors.accentGlow.opacity(0.22) : Color.white.opacity(0.04))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
-                                .stroke(section == selectedSection ? MacYTColors.accentGradientEnd.opacity(0.48) : Color.white.opacity(0.06), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: MacYTSpacing.md) {
-                statusRow(icon: "film.stack.fill", title: viewModel.videoInfo == nil ? "No media yet" : "Media ready", tint: viewModel.videoInfo == nil ? MacYTColors.textTertiary : MacYTColors.success)
-                statusRow(icon: checker.allRequiredInstalled ? "checkmark.seal.fill" : "exclamationmark.triangle.fill", title: checker.allRequiredInstalled ? "Tools healthy" : "Tool attention", tint: checker.allRequiredInstalled ? MacYTColors.success : MacYTColors.warning)
-                statusRow(icon: "folder.fill", title: viewModel.downloadOptions.outputDirectory.lastPathComponent, tint: MacYTColors.accentGradientEnd)
-            }
-            .padding(MacYTSpacing.lg)
-            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: MacYTCornerRadius.xLarge, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: MacYTCornerRadius.xLarge, style: .continuous)
-                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
-            )
+            sidebarHeader
+            sectionSwitcher
+            statusPanel
 
             Spacer(minLength: 0)
         }
         .padding(MacYTSpacing.xl)
-        .frame(width: 300, maxHeight: .infinity, alignment: .topLeading)
+        .frame(width: 300)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .macYTCard()
+    }
+
+    private var sidebarHeader: some View {
+        VStack(alignment: .leading, spacing: MacYTSpacing.md) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(sidebarBrandGradient)
+                    .frame(width: 58, height: 58)
+
+                Image(systemName: "play.tv.fill")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+            }
+
+            Text("MacYT")
+                .font(.system(size: 24, weight: .heavy, design: .rounded))
+                .foregroundColor(MacYTColors.textPrimary)
+
+            Text("A two-room workflow for previewing first and exporting second.")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundColor(MacYTColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var sectionSwitcher: some View {
+        VStack(spacing: MacYTSpacing.md) {
+            ForEach(WorkspaceSection.allCases) { section in
+                sectionButton(section)
+            }
+        }
+    }
+
+    private var statusPanel: some View {
+        VStack(alignment: .leading, spacing: MacYTSpacing.md) {
+            statusRow(icon: "film.stack.fill", title: viewModel.videoInfo == nil ? "No media yet" : "Media ready", tint: viewModel.videoInfo == nil ? MacYTColors.textTertiary : MacYTColors.success)
+            statusRow(icon: checker.allRequiredInstalled ? "checkmark.seal.fill" : "exclamationmark.triangle.fill", title: checker.allRequiredInstalled ? "Tools healthy" : "Tool attention", tint: checker.allRequiredInstalled ? MacYTColors.success : MacYTColors.warning)
+            statusRow(icon: "folder.fill", title: viewModel.downloadOptions.outputDirectory.lastPathComponent, tint: MacYTColors.accentGradientEnd)
+        }
+        .padding(MacYTSpacing.lg)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: MacYTCornerRadius.xLarge, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: MacYTCornerRadius.xLarge, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    private var sidebarBrandGradient: LinearGradient {
+        LinearGradient(
+            colors: [MacYTColors.accentGradientStart.opacity(0.95), MacYTColors.accentGradientEnd.opacity(0.95)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private func sectionButton(_ section: WorkspaceSection) -> some View {
+        let isSelected = section == selectedSection
+
+        return Button {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                selectedSection = section
+            }
+        } label: {
+            HStack(spacing: MacYTSpacing.md) {
+                Image(systemName: section.icon)
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(width: 34, height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(isSelected ? Color.white.opacity(0.16) : Color.white.opacity(0.05))
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(section.title)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                    Text(section.subtitle)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundColor(MacYTColors.textSecondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(MacYTColors.textPrimary)
+            .padding(MacYTSpacing.md)
+            .background(sectionBackground(isSelected: isSelected))
+            .overlay(sectionBorder(isSelected: isSelected))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func sectionBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+            .fill(isSelected ? MacYTColors.accentGlow.opacity(0.22) : Color.white.opacity(0.04))
+    }
+
+    private func sectionBorder(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+            .stroke(isSelected ? MacYTColors.accentGradientEnd.opacity(0.48) : Color.white.opacity(0.06), lineWidth: 1)
     }
 
     private func statusRow(icon: String, title: String, tint: Color) -> some View {

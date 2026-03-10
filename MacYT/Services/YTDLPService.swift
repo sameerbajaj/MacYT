@@ -85,7 +85,7 @@ class YTDLPService {
         }
     }
 
-    private static func describeDecodingError(_ error: Error) -> String {
+    nonisolated private static func describeDecodingError(_ error: Error) -> String {
         switch error {
         case let DecodingError.typeMismatch(type, context):
             return "Type mismatch for \(type) at \(codingPath(context.codingPath)): \(context.debugDescription)"
@@ -100,12 +100,12 @@ class YTDLPService {
         }
     }
 
-    private static func codingPath(_ codingPath: [CodingKey]) -> String {
+    nonisolated private static func codingPath(_ codingPath: [CodingKey]) -> String {
         let joined = codingPath.map(\.stringValue).joined(separator: ".")
         return joined.isEmpty ? "<root>" : joined
     }
 
-    private static func persistDebugArtifacts(stdout: Data, stderr: Data) -> URL? {
+    nonisolated private static func persistDebugArtifacts(stdout: Data, stderr: Data) -> URL? {
         let fileManager = FileManager.default
         let logsDirectory = fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/MacYT", isDirectory: true)
