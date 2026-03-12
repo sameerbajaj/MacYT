@@ -20,7 +20,7 @@ class DownloadManager: ObservableObject {
     private var detectedOutputURL: URL?
     
     @MainActor
-    func startDownload(url: String, formatId: String?, options: DownloadOptions) async {
+    func startDownload(url: String, formatExpression: String?, options: DownloadOptions) async {
         self.status = .fetching
         self.consoleLogs.removeAll()
         self.detectedOutputURL = nil
@@ -31,7 +31,7 @@ class DownloadManager: ObservableObject {
             args.insert(contentsOf: ["--ffmpeg-location", ffmpegDirectory], at: 0)
         }
 
-        if let fm = formatId {
+        if let fm = formatExpression {
             args.append(contentsOf: ["-f", fm])
         } else if !options.extractAudio {
             args.append(contentsOf: ["-f", "bv*+ba/best"])

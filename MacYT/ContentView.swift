@@ -988,16 +988,7 @@ private extension AppViewModel {
             return "\(downloadOptions.audioFormat.uppercased()) • \(downloadOptions.audioBitrate.label)"
         }
 
-        if let selectedFormatId,
-           let format = formats.first(where: { $0.formatId == selectedFormatId }) {
-            return "\(format.displayResolution) • \(format.ext.uppercased())"
-        }
-
-        if let fallback = formats.first(where: { !$0.isAudioOnly }) {
-            return "\(fallback.displayResolution) • \(fallback.ext.uppercased())"
-        }
-
-        return "Auto selection"
+        return selectedQualitySummary
     }
 }
 

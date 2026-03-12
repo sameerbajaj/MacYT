@@ -100,8 +100,8 @@ class AppViewModel: ObservableObject {
             return
         }
 
-        guard DependencyChecker.shared.ffmpegStatus.isInstalled else {
-            errorMessage = DependencyChecker.shared.ffmpegWarningText
+        guard !currentSelectionRequiresFFmpeg || DependencyChecker.shared.ffmpegStatus.isInstalled else {
+            errorMessage = ffmpegRequirementMessage
             appState = .showingFormats
             return
         }
@@ -110,10 +110,10 @@ class AppViewModel: ObservableObject {
         
         appState = .downloading
         errorMessage = nil
-        let formatId = effectiveFormatIdForCurrentMode()
+        let formatExpression = effectiveFormatExpressionForCurrentMode()
         
         Task {
-            await downloadManager.startDownload(url: urlText, formatId: formatId, options: downloadOptions)
+            await downloadManager.startDownload(url: urlText, formatExpression: formatExpression, options: downloadOptions)
              
             if case .completed = downloadManager.status {
                 appState = .completed
@@ -174,26 +174,102 @@ class AppViewModel: ObservableObject {
                 ?? formats.first?.formatId
         }
 
-        return formats.first(where: { !$0.isAudioOnly && !$0.isVideoOnly })?.formatId
-            ?? formats.first(where: { !$0.isAudioOnly })?.formatId
+        let preferredFormats = preferredVideoFormatsForCurrentEnvironment()
+        return preferredFormats.first?.formatId
             ?? formats.first?.formatId
     }
 
-    private func effectiveFormatIdForCurrentMode() -> String? {
+    private func effectiveFormatExpressionForCurrentMode() -> String? {
         guard !formats.isEmpty else { return selectedFormatId }
 
         if downloadOptions.extractAudio {
             return nil
         }
 
-        if let selectedFormatId,
-           let selected = formats.first(where: { $0.formatId == selectedFormatId }),
-           !selected.isAudioOnly {
-            return selected.formatId
+        guard let selected = selectedVideoFormat else {
+            return preferredVideoFormatsForCurrentEnvironment().first.map(formatExpression(for:))
+                ?? selectedFormatId
         }
 
-        return formats.first(where: { !$0.isAudioOnly && !$0.isVideoOnly })?.formatId
-            ?? formats.first(where: { !$0.isAudioOnly })?.formatId
-            ?? selectedFormatId
+        return formatExpression(for: selected)
+    }
+
+    private func preferredVideoFormatsForCurrentEnvironment() -> [VideoFormat] {
+        let preferredDirectFormats = formats.filter { !$0.isAudioOnly && !$0.isVideoOnly }
+        let allVideoFormats = formats.filter { !$0.isAudioOnly }
+
+        if DependencyChecker.shared.ffmpegStatus.isInstalled {
+            return sortVideoFormatsForPreference(allVideoFormats)
+        }
+
+        return sortVideoFormatsForPreference(preferredDirectFormats.isEmpty ? allVideoFormats : preferredDirectFormats)
+    }
+
+    private func sortVideoFormatsForPreference(_ formats: [VideoFormat]) -> [VideoFormat] {
+        formats.sorted {
+            if ($0.height ?? 0) == ($1.height ?? 0) {
+                if $0.hasAudio != $1.hasAudio {
+                    return $0.hasAudio && !$1.hasAudio
+                }
+                return ($0.tbr ?? 0) > ($1.tbr ?? 0)
+            }
+            return ($0.height ?? 0) > ($1.height ?? 0)
+        }
+    }
+
+    private func formatExpression(for format: VideoFormat) -> String {
+        guard format.isVideoOnly else {
+            return format.formatId
+        }
+
+        return "\(format.formatId)+bestaudio/\(format.formatId)+ba/\(format.formatId)"
+    }
+}
+
+extension AppViewModel {
+    var selectedVideoFormat: VideoFormat? {
+        guard !downloadOptions.extractAudio else { return nil }
+
+        if let selectedFormatId,
+           let format = formats.first(where: { $0.formatId == selectedFormatId }),
+           !format.isAudioOnly {
+            return format
+        }
+
+        return formats.first(where: { !$0.isAudioOnly && !$0.isVideoOnly })
+            ?? formats.first(where: { !$0.isAudioOnly })
+    }
+
+    var currentSelectionRequiresFFmpeg: Bool {
+        if downloadOptions.extractAudio {
+            return true
+        }
+
+        return selectedVideoFormat?.needsSeparateAudioMerge == true
+    }
+
+    var ffmpegRequirementMessage: String {
+        if downloadOptions.extractAudio {
+            return DependencyChecker.shared.ffmpegWarningText ?? "FFmpeg is required for audio extraction."
+        }
+
+        guard let selectedVideoFormat, selectedVideoFormat.isVideoOnly else {
+            return DependencyChecker.shared.ffmpegWarningText ?? "FFmpeg is required for this export."
+        }
+
+        return "\(selectedVideoFormat.simplifiedQualityLabel) needs FFmpeg so MacYT can merge the video stream with audio."
+    }
+
+    var selectedQualitySummary: String {
+        if downloadOptions.extractAudio {
+            return "\(downloadOptions.audioFormat.uppercased()) • \(downloadOptions.audioBitrate.label)"
+        }
+
+        guard let selectedVideoFormat else {
+            return "Auto selection"
+        }
+
+        let suffix = selectedVideoFormat.isVideoOnly ? "Merge with audio" : "Audio included"
+        return "\(selectedVideoFormat.simplifiedQualityLabel) • \(suffix)"
     }
 }

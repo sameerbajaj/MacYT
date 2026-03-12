@@ -97,4 +97,41 @@ struct VideoFormat: Codable, Identifiable {
     var displayContainer: String {
         ext.uppercased()
     }
+
+    var simplifiedQualityLabel: String {
+        guard let height else {
+            return displayResolution
+        }
+
+        switch height {
+        case 2160...:
+            return "4K"
+        case 1440..<2160:
+            return "2K"
+        case 1080..<1440:
+            return "1080p"
+        case 720..<1080:
+            return "720p"
+        case 480..<720:
+            return "480p"
+        case 360..<480:
+            return "360p"
+        case 240..<360:
+            return "240p"
+        default:
+            return "\(height)p"
+        }
+    }
+
+    var shortDimensionLabel: String {
+        if let width, let height {
+            return "\(width)x\(height)"
+        }
+
+        return displayResolution
+    }
+
+    var needsSeparateAudioMerge: Bool {
+        isVideoOnly
+    }
 }
