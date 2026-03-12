@@ -60,7 +60,7 @@ class DownloadOptions: ObservableObject {
     @Published var audioBitrate: AudioBitratePreset = .best
     
     @Published var splitChapters: Bool = false
-    @Published var outputDirectory: URL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+    @Published var outputDirectory: URL = DownloadOptions.defaultOutputDirectory()
     @Published var filenameTemplate: String = "%(title)s.%(ext)s"
 
     var exportModeTitle: String {
@@ -69,6 +69,8 @@ class DownloadOptions: ObservableObject {
     
     func commandLineFlags() -> [String] {
         var flags: [String] = []
+
+        DownloadOptions.ensureDirectoryExists(outputDirectory)
         
         flags.append(contentsOf: ["--paths", outputDirectory.path])
         flags.append(contentsOf: ["-o", filenameTemplate])
@@ -108,5 +110,17 @@ class DownloadOptions: ObservableObject {
         }
         
         return flags
+    }
+
+    static func defaultOutputDirectory() -> URL {
+        let downloadsDirectory = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+        let appDirectory = downloadsDirectory.appendingPathComponent("MacYT", isDirectory: true)
+
+        ensureDirectoryExists(appDirectory)
+        return appDirectory
+    }
+
+    static func ensureDirectoryExists(_ directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 }

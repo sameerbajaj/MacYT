@@ -17,11 +17,13 @@ class DownloadManager: ObservableObject {
     @Published var consoleLogs: [String] = []
     
     private var process: Process?
+    private var detectedOutputURL: URL?
     
     @MainActor
     func startDownload(url: String, formatId: String?, options: DownloadOptions) async {
         self.status = .fetching
         self.consoleLogs.removeAll()
+        self.detectedOutputURL = nil
         
         var args = options.commandLineFlags()
         if let ffmpegPath = DependencyChecker.shared.installedPath(for: "ffmpeg") {
@@ -87,7 +89,9 @@ class DownloadManager: ObservableObject {
             
             let termStatus = process?.terminationStatus ?? -1
             if termStatus == 0 {
-                self.status = .completed(filePath: "Download completed")
+                let resolvedOutputURL = detectedOutputURL ?? options.outputDirectory
+                DownloadHistoryStore.shared.recordDownload(at: resolvedOutputURL, sourceURL: url)
+                self.status = .completed(filePath: resolvedOutputURL.path)
             } else if status != .cancelled {
                 self.status = .failed(error: "yt-dlp exited with code \(termStatus)")
             }
@@ -110,6 +114,7 @@ class DownloadManager: ObservableObject {
         for line in lines where !line.isEmpty {
             self.currentLine = line
             self.consoleLogs.append(line)
+            captureOutputLocation(from: line)
             if self.consoleLogs.count > 500 {
                 self.consoleLogs.removeFirst(self.consoleLogs.count - 500)
             }
@@ -129,4 +134,124 @@ class DownloadManager: ObservableObject {
             }
         }
     }
+
+    @MainActor
+    private func captureOutputLocation(from line: String) {
+        if let path = quotedPath(in: line, prefix: "[Merger] Merging formats into ") {
+            detectedOutputURL = URL(fileURLWithPath: path)
+            return
+        }
+
+        if let path = plainPath(in: line, prefix: "[ExtractAudio] Destination: ") {
+            detectedOutputURL = URL(fileURLWithPath: path)
+            return
+        }
+
+        if let path = plainPath(in: line, prefix: "[download] Destination: ") {
+            detectedOutputURL = URL(fileURLWithPath: path)
+        }
+    }
+
+    private func plainPath(in line: String, prefix: String) -> String? {
+        guard line.hasPrefix(prefix) else { return nil }
+        return String(line.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func quotedPath(in line: String, prefix: String) -> String? {
+        guard line.hasPrefix(prefix) else { return nil }
+
+        let remainder = line.dropFirst(prefix.count)
+
+        guard let firstQuoteIndex = remainder.firstIndex(of: "\"") else { return nil }
+        let startIndex = remainder.index(after: firstQuoteIndex)
+        guard let endIndex = remainder[startIndex...].firstIndex(of: "\"") else { return nil }
+
+        return String(remainder[startIndex..<endIndex])
+    }
+}
+
+@MainActor
+final class DownloadHistoryStore: ObservableObject {
+    static let shared = DownloadHistoryStore()
+
+    @Published private(set) var records: [DownloadHistoryRecord] = []
+    @Published private(set) var lastError: String?
+
+    private init() {
+        refresh()
+    }
+
+    func refresh() {
+        do {
+            let fileURL = try historyFileURL()
+            guard FileManager.default.fileExists(atPath: fileURL.path) else {
+                records = []
+                lastError = nil
+                return
+            }
+
+            let data = try Data(contentsOf: fileURL)
+            let decodedRecords = try JSONDecoder().decode([DownloadHistoryRecord].self, from: data)
+            records = decodedRecords
+                .filter { FileManager.default.fileExists(atPath: $0.filePath) }
+                .sorted { $0.downloadedAt > $1.downloadedAt }
+            lastError = nil
+        } catch {
+            records = []
+            lastError = "Could not load MacYT download history."
+        }
+    }
+
+    func recordDownload(at fileURL: URL, sourceURL: String?) {
+        let standardizedURL = fileURL.standardizedFileURL
+
+        guard FileManager.default.fileExists(atPath: standardizedURL.path) else {
+            return
+        }
+
+        let record = DownloadHistoryRecord(
+            filePath: standardizedURL.path,
+            sourceURL: sourceURL,
+            downloadedAt: Date()
+        )
+
+        records.removeAll { $0.filePath == record.filePath }
+        records.insert(record, at: 0)
+        records.sort { $0.downloadedAt > $1.downloadedAt }
+
+        do {
+            try persist()
+            lastError = nil
+        } catch {
+            lastError = "Could not save MacYT download history."
+        }
+    }
+
+    private func persist() throws {
+        let fileURL = try historyFileURL()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(records)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
+    private func historyFileURL() throws -> URL {
+        let appSupportDirectory = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let appDirectory = appSupportDirectory.appendingPathComponent("MacYT", isDirectory: true)
+        try FileManager.default.createDirectory(at: appDirectory, withIntermediateDirectories: true)
+        return appDirectory.appendingPathComponent("download-history.json")
+    }
+}
+
+struct DownloadHistoryRecord: Codable, Identifiable {
+    let filePath: String
+    let sourceURL: String?
+    let downloadedAt: Date
+
+    var id: String { filePath }
 }

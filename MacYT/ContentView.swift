@@ -102,13 +102,7 @@ struct MainAppView: View {
             }
             .padding(.bottom, 116)
         }
-        .mask(
-            LinearGradient(
-                colors: [.clear, .black, .black, .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .mask(workspaceScrollMask)
     }
 
     private var downloadsWorkspace: some View {
@@ -117,19 +111,26 @@ struct MainAppView: View {
                 workspaceHero(
                     eyebrow: "Downloads",
                     title: "Exported files",
-                    subtitle: "This tab only shows what is already downloaded. Configure and start new exports in Studio."
+                    subtitle: "This tab only shows files MacYT exported. Configure and start new exports in Studio."
                 )
 
-                ExportedFilesView(directory: viewModel.downloadOptions.outputDirectory)
+                ExportedFilesView()
             }
             .padding(.bottom, 116)
         }
-        .mask(
-            LinearGradient(
-                colors: [.clear, .black, .black, .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+        .mask(workspaceScrollMask)
+    }
+
+    private var workspaceScrollMask: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0.0),
+                .init(color: .black, location: 0.035),
+                .init(color: .black, location: 0.965),
+                .init(color: .clear, location: 1.0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
         )
     }
 
