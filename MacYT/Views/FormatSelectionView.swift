@@ -31,9 +31,7 @@ struct FormatSelectionView: View {
             } else {
                 VStack(spacing: MacYTSpacing.sm) {
                     recommendationBanner
-                    if let helperBanner {
-                        helperBanner
-                    }
+                    helperBanner
 
                     LazyVStack(spacing: MacYTSpacing.sm) {
                         ForEach(simpleQualityOptions) { option in
@@ -116,27 +114,25 @@ struct FormatSelectionView: View {
     }
 
     @ViewBuilder
-    private var helperBanner: some View? {
-        guard let selectedFormat = viewModel.selectedVideoFormat else {
-            return nil
-        }
-
-        if selectedFormat.isVideoOnly {
-            MacYTInlineBanner(
-                icon: checker.ffmpegStatus.isInstalled ? "arrow.triangle.merge" : "exclamationmark.triangle.fill",
-                title: checker.ffmpegStatus.isInstalled ? "Merge needed for \(selectedFormat.simplifiedQualityLabel)" : "FFmpeg needed for \(selectedFormat.simplifiedQualityLabel)",
-                message: checker.ffmpegStatus.isInstalled
-                    ? "This quality comes as a video-only stream. MacYT will pair it with the best audio track during export."
-                    : "This quality comes as a video-only stream. Install or repair FFmpeg before exporting so MacYT can merge in the audio track.",
-                tint: checker.ffmpegStatus.isInstalled ? MacYTColors.warning : MacYTColors.destructive
-            )
-        } else {
-            MacYTInlineBanner(
-                icon: "checkmark.circle.fill",
-                title: "Audio already included",
-                message: "\(selectedFormat.simplifiedQualityLabel) is available as a ready-to-download stream, so MacYT can save it without an extra merge step.",
-                tint: MacYTColors.success
-            )
+    private var helperBanner: some View {
+        if let selectedFormat = viewModel.selectedVideoFormat {
+            if selectedFormat.isVideoOnly {
+                MacYTInlineBanner(
+                    icon: checker.ffmpegStatus.isInstalled ? "arrow.triangle.merge" : "exclamationmark.triangle.fill",
+                    title: checker.ffmpegStatus.isInstalled ? "Merge needed for \(selectedFormat.simplifiedQualityLabel)" : "FFmpeg needed for \(selectedFormat.simplifiedQualityLabel)",
+                    message: checker.ffmpegStatus.isInstalled
+                        ? "This quality comes as a video-only stream. MacYT will pair it with the best audio track during export."
+                        : "This quality comes as a video-only stream. Install or repair FFmpeg before exporting so MacYT can merge in the audio track.",
+                    tint: checker.ffmpegStatus.isInstalled ? MacYTColors.warning : MacYTColors.destructive
+                )
+            } else {
+                MacYTInlineBanner(
+                    icon: "checkmark.circle.fill",
+                    title: "Audio already included",
+                    message: "\(selectedFormat.simplifiedQualityLabel) is available as a ready-to-download stream, so MacYT can save it without an extra merge step.",
+                    tint: MacYTColors.success
+                )
+            }
         }
     }
 
