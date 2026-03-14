@@ -3,10 +3,7 @@ import SwiftUI
 @MainActor
 struct ExportedFilesView: View {
     @ObservedObject private var historyStore = DownloadHistoryStore.shared
-
-    private var files: [ExportedFileItem] {
-        historyStore.records.compactMap(ExportedFileItem.init)
-    }
+    @State private var files: [ExportedFileItem] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: MacYTSpacing.lg) {
@@ -43,58 +40,68 @@ struct ExportedFilesView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous))
             } else {
-                ForEach(files) { file in
-                    HStack(spacing: MacYTSpacing.md) {
-                        Image(systemName: "doc.fill")
+                LazyVStack(spacing: MacYTSpacing.md) {
+                    ForEach(files) { file in
+                        HStack(spacing: MacYTSpacing.md) {
+                            Image(systemName: "doc.fill")
+                                .foregroundColor(MacYTColors.accentGradientEnd)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(file.name)
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundColor(MacYTColors.textPrimary)
+                                    .lineLimit(1)
+
+                                Text("\(file.sizeLabel) • \(file.modifiedLabel)")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundColor(MacYTColors.textTertiary)
+
+                                Text(file.parentDirectoryPath)
+                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                    .foregroundColor(MacYTColors.textTertiary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+
+                            Spacer(minLength: 0)
+
+                            Button("Open") {
+                                NSWorkspace.shared.open(file.url)
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(MacYTColors.textSecondary)
+
+                            Button("Reveal") {
+                                NSWorkspace.shared.activateFileViewerSelecting([file.url])
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
                             .foregroundColor(MacYTColors.accentGradientEnd)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(file.name)
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .foregroundColor(MacYTColors.textPrimary)
-                                .lineLimit(1)
-
-                            Text("\(file.sizeLabel) • \(file.modifiedLabel)")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .foregroundColor(MacYTColors.textTertiary)
-
-                            Text(file.parentDirectoryPath)
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                .foregroundColor(MacYTColors.textTertiary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
                         }
-
-                        Spacer(minLength: 0)
-
-                        Button("Open") {
-                            NSWorkspace.shared.open(file.url)
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundColor(MacYTColors.textSecondary)
-
-                        Button("Reveal") {
-                            NSWorkspace.shared.activateFileViewerSelecting([file.url])
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundColor(MacYTColors.accentGradientEnd)
+                        .padding(.horizontal, MacYTSpacing.md)
+                        .padding(.vertical, MacYTSpacing.md)
+                        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
+                                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                        )
                     }
-                    .padding(.horizontal, MacYTSpacing.md)
-                    .padding(.vertical, MacYTSpacing.md)
-                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: MacYTCornerRadius.large, style: .continuous)
-                            .stroke(Color.white.opacity(0.06), lineWidth: 1)
-                    )
                 }
             }
         }
         .padding(MacYTSpacing.xl)
         .frame(maxWidth: .infinity, alignment: .leading)
         .macYTCard()
-        .onAppear(perform: historyStore.refresh)
+        .onAppear(perform: loadHistory)
+        .onReceive(historyStore.$records) { _ in
+            files = historyStore.records.compactMap(ExportedFileItem.init)
+        }
+    }
+
+    private func loadHistory() {
+        historyStore.refresh()
+        files = historyStore.records.compactMap(ExportedFileItem.init)
     }
 }
 

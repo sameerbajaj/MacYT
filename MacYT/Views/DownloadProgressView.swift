@@ -46,7 +46,7 @@ struct DownloadProgressView: View {
                     }
                     Spacer()
                     Button("Reveal in Finder") {
-                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: viewModel.downloadOptions.outputDirectory.path)
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                     }
                     .buttonStyle(.plain)
                     .foregroundColor(MacYTColors.accentGradientEnd)

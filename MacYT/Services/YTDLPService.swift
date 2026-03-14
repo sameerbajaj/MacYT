@@ -65,12 +65,20 @@ class YTDLPService {
                         return
                     }
 
-                    let decoder = JSONDecoder()
-                    do {
-                        let info = try decoder.decode(VideoInfo.self, from: data)
+                    let decodedInfo = await MainActor.run { () -> Result<VideoInfo, Error> in
+                        let decoder = JSONDecoder()
+                        do {
+                            return .success(try decoder.decode(VideoInfo.self, from: data))
+                        } catch {
+                            return .failure(error)
+                        }
+                    }
+
+                    switch decodedInfo {
+                    case .success(let info):
                         self.logger.info("Decoded yt-dlp payload for video: \(info.id, privacy: .public) title: \(info.title, privacy: .public)")
                         continuation.resume(returning: info)
-                    } catch {
+                    case .failure(let error):
                         let details = Self.describeDecodingError(error)
                         let dumpURL = Self.persistDebugArtifacts(stdout: data, stderr: errData)
                         let message = "Failed to parse yt-dlp output. \(details)\(dumpURL.map { " Raw response saved to \($0.path)." } ?? "")"
