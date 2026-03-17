@@ -23,12 +23,16 @@ enum SelfUpdater {
 
             await MainActor.run { onStateChange(.installing) }
             let mountPoint = try await mountDMG(at: localDMG)
-            let newAppURL = try locateApp(in: mountPoint)
+            defer {
+                unmountDMG(mountPoint: mountPoint)
+                try? FileManager.default.removeItem(at: localDMG)
+            }
+
             let runningAppURL = Bundle.main.bundleURL
+            let expectedAppName = runningAppURL.lastPathComponent
+            let newAppURL = try locateApp(in: mountPoint, preferredAppName: expectedAppName)
 
             try replaceApp(old: runningAppURL, with: newAppURL)
-            unmountDMG(mountPoint: mountPoint)
-            try? FileManager.default.removeItem(at: localDMG)
             relaunchApp(at: runningAppURL)
         } catch {
             await MainActor.run { onStateChange(.failed(error.localizedDescription)) }
@@ -119,9 +123,26 @@ enum SelfUpdater {
         process.waitUntilExit()
     }
 
-    private static func locateApp(in volume: URL) throws -> URL {
-        let contents = try FileManager.default.contentsOfDirectory(at: volume, includingPropertiesForKeys: nil)
-        guard let app = contents.first(where: { $0.pathExtension == "app" }) else {
+    private static func locateApp(in volume: URL, preferredAppName: String) throws -> URL {
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: volume,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+        )
+        let candidates = contents.filter { $0.pathExtension.lowercased() == "app" }
+
+        if let preferred = candidates.first(where: { $0.lastPathComponent == preferredAppName }) {
+            return preferred
+        }
+
+        if candidates.count == 1, let only = candidates.first {
+            return only
+        }
+
+        if let fallback = candidates.first(where: { $0.lastPathComponent.lowercased().contains("macyt") }) {
+            return fallback
+        }
+
+        guard let app = candidates.first else {
             throw UpdateError.appNotFoundInDMG
         }
         return app
@@ -135,21 +156,54 @@ enum SelfUpdater {
 
         let parent = old.deletingLastPathComponent()
         let staged = parent.appendingPathComponent(".MacYT-update-staging.app")
+        let backup = parent.appendingPathComponent(".MacYT-update-backup.app")
 
         try? fileManager.removeItem(at: staged)
+        try? fileManager.removeItem(at: backup)
         try fileManager.copyItem(at: new, to: staged)
-        adHocSign(staged)
-        _ = try fileManager.replaceItemAt(old, withItemAt: staged)
+        clearQuarantine(at: staged)
+
+        do {
+            try fileManager.moveItem(at: old, to: backup)
+            try fileManager.moveItem(at: staged, to: old)
+            try verifyCodeSignature(at: old)
+            try? fileManager.removeItem(at: backup)
+        } catch {
+            try? fileManager.removeItem(at: old)
+            if fileManager.fileExists(atPath: backup.path) {
+                try? fileManager.moveItem(at: backup, to: old)
+            }
+            throw UpdateError.installFailed(error.localizedDescription)
+        }
     }
 
-    private static func adHocSign(_ appURL: URL) {
+    private static func clearQuarantine(at appURL: URL) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        process.arguments = ["--force", "--deep", "--sign", "-", appURL.path]
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        process.arguments = ["-dr", "com.apple.quarantine", appURL.path]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try? process.run()
         process.waitUntilExit()
+    }
+
+    private static func verifyCodeSignature(at appURL: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        process.arguments = ["--verify", "--deep", "--strict", appURL.path]
+        process.standardOutput = FileHandle.nullDevice
+
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let message = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw UpdateError.invalidUpdatedApp(message ?? "Code signature verification failed.")
+        }
     }
 
     private static func relaunchApp(at appURL: URL) {
@@ -185,6 +239,8 @@ enum SelfUpdater {
         case mountFailed
         case appNotFoundInDMG
         case currentAppNotFound
+        case invalidUpdatedApp(String)
+        case installFailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -196,6 +252,10 @@ enum SelfUpdater {
                 return "No app found in the update image."
             case .currentAppNotFound:
                 return "Cannot locate the running app to replace."
+            case .invalidUpdatedApp(let details):
+                return "The downloaded app failed verification. \(details)"
+            case .installFailed(let details):
+                return "Failed to install the update. \(details)"
             }
         }
     }
