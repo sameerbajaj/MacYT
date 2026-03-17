@@ -122,8 +122,9 @@ class DownloadManager: ObservableObject {
     }
     
     private let progressRegex = try! NSRegularExpression(pattern: #"\[download\]\s+(\d+(?:\.\d+)?)\%"#)
-    private let speedRegex = try! NSRegularExpression(pattern: #"\sat\s+([a-zA-Z0-9.\/]+)"#)
-    private let etaRegex = try! NSRegularExpression(pattern: #"\sETA\s+([0-9:]+)"#)
+    private let speedRegex = try! NSRegularExpression(pattern: #"\bat\s+(.+?)(?:\s+ETA\b|$)"#)
+    private let etaRegex = try! NSRegularExpression(pattern: #"\bETA\s+([0-9:]+|Unknown)"#)
+    private let ansiRegex = try! NSRegularExpression(pattern: #"\u{001B}\[[0-9;]*[A-Za-z]"#)
     
     private func enqueueOutputChunk(_ data: Data) {
         let text = String(decoding: data, as: UTF8.self)
@@ -153,29 +154,32 @@ class DownloadManager: ObservableObject {
                 pendingDetectedOutputURL = detectedURL
             }
         }
+
+        let partialLine = bufferedChunkRemainder.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !partialLine.isEmpty {
+            updatePendingStatus(from: partialLine)
+        }
     }
 
     private func updatePendingStatus(from line: String) {
+        let normalizedLine = sanitizeOutputLine(line)
+
+        guard !normalizedLine.isEmpty else { return }
+
         if line.contains("[Merger]") || line.contains("[ExtractAudio]") {
             pendingStatus = .postProcessing
             return
         }
 
-        guard let match = progressRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-              let pctRange = Range(match.range(at: 1), in: line),
-              let pct = Double(line[pctRange]) else {
+        guard let snapshot = parseDownloadProgressSnapshot(from: normalizedLine) else {
             return
         }
 
-        if let speed = captureFirstGroup(from: speedRegex, in: line) {
-            pendingSpeed = speed
-        }
-        if let eta = captureFirstGroup(from: etaRegex, in: line) {
-            pendingETA = eta
-        }
+        pendingSpeed = snapshot.speed
+        pendingETA = snapshot.eta
 
-        let progress = max(0, min(1, pct / 100.0))
-        if progress >= 1 && !line.contains("ETA") {
+        let progress = max(0, min(1, snapshot.percent / 100.0))
+        if progress >= 1 && !normalizedLine.contains("ETA") {
             pendingStatus = .postProcessing
         } else {
             pendingStatus = .downloading(percent: progress, speed: pendingSpeed, eta: pendingETA)
@@ -187,7 +191,7 @@ class DownloadManager: ObservableObject {
         stopOutputFlushTimer(flushRemainder: false)
 
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(120), leeway: .milliseconds(30))
+        timer.schedule(deadline: .now(), repeating: .milliseconds(180), leeway: .milliseconds(40))
         timer.setEventHandler { [weak self] in
             self?.flushPendingOutput(includeRemainder: false)
         }
@@ -235,8 +239,8 @@ class DownloadManager: ObservableObject {
         if !snapshot.lines.isEmpty {
             currentLine = snapshot.lines.last ?? currentLine
             consoleLogs.append(contentsOf: snapshot.lines)
-            if consoleLogs.count > 500 {
-                consoleLogs.removeFirst(consoleLogs.count - 500)
+            if consoleLogs.count > 250 {
+                consoleLogs.removeFirst(consoleLogs.count - 250)
             }
         }
         if let outputURL = snapshot.outputURL {
@@ -350,7 +354,43 @@ class DownloadManager: ObservableObject {
               let range = Range(match.range(at: 1), in: line) else {
             return nil
         }
-        return String(line[range])
+        return String(line[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func parseDownloadProgressSnapshot(from line: String) -> DownloadProgressSnapshot? {
+        guard let match = progressRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+              let pctRange = Range(match.range(at: 1), in: line),
+              let pct = Double(line[pctRange]) else {
+            return nil
+        }
+
+        let speedCandidate = captureFirstGroup(from: speedRegex, in: line) ?? pendingSpeed
+        let etaCandidate = captureFirstGroup(from: etaRegex, in: line) ?? pendingETA
+
+        return DownloadProgressSnapshot(
+            percent: pct,
+            speed: normalizeSpeedLabel(speedCandidate),
+            eta: normalizeETALabel(etaCandidate)
+        )
+    }
+
+    private func sanitizeOutputLine(_ line: String) -> String {
+        let range = NSRange(line.startIndex..., in: line)
+        let stripped = ansiRegex.stringByReplacingMatches(in: line, range: range, withTemplate: "")
+        return stripped.replacingOccurrences(of: "\u{00A0}", with: " ")
+    }
+
+    private func normalizeSpeedLabel(_ label: String) -> String {
+        let cleaned = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty || cleaned.caseInsensitiveCompare("unknown") == .orderedSame {
+            return "Unknown"
+        }
+        return cleaned
+    }
+
+    private func normalizeETALabel(_ label: String) -> String {
+        let cleaned = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Unknown" : cleaned
     }
 
     private func plainPath(in line: String, prefix: String) -> String? {
@@ -369,6 +409,12 @@ class DownloadManager: ObservableObject {
 
         return String(remainder[startIndex..<endIndex])
     }
+}
+
+private struct DownloadProgressSnapshot {
+    let percent: Double
+    let speed: String
+    let eta: String
 }
 
 @MainActor

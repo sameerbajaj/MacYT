@@ -1,11 +1,16 @@
 import SwiftUI
 
 struct DownloadProgressView: View {
-    @ObservedObject var viewModel: AppViewModel
+    @ObservedObject var downloadManager: DownloadManager
+    let isAudioMode: Bool
+    let isDownloadActive: Bool
+    let startDownload: () -> Void
+    let cancelDownload: () -> Void
+    let resetSession: () -> Void
     
     var body: some View {
         VStack(spacing: MacYTSpacing.md) {
-            switch viewModel.downloadManager.status {
+            switch downloadManager.status {
             case .idle, .cancelled:
                 HStack {
                     Text("Ready to export")
@@ -13,11 +18,11 @@ struct DownloadProgressView: View {
                         .foregroundColor(MacYTColors.textSecondary)
                     Spacer()
                     GradientButton(
-                        title: "Download \(viewModel.downloadOptions.extractAudio ? "Audio" : "Video")",
+                        title: "Download \(isAudioMode ? "Audio" : "Video")",
                         icon: "arrow.down.circle.fill",
                         isLoading: false
                     ) {
-                        viewModel.startDownload()
+                        startDownload()
                     }
                     .frame(height: 50)
                 }
@@ -52,7 +57,7 @@ struct DownloadProgressView: View {
                     .foregroundColor(MacYTColors.accentGradientEnd)
                     
                     Button("New Download") {
-                        viewModel.reset()
+                        resetSession()
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, MacYTSpacing.md)
@@ -77,7 +82,7 @@ struct DownloadProgressView: View {
                     }
                     Spacer()
                     GradientButton(title: "Retry", icon: "arrow.clockwise", isLoading: false) {
-                        viewModel.startDownload()
+                        startDownload()
                     }
                     .frame(height: 46)
                 }
@@ -86,11 +91,11 @@ struct DownloadProgressView: View {
                 .cornerRadius(MacYTCornerRadius.large)
             }
             
-            if viewModel.appState == .downloading {
+            if isDownloadActive {
                 HStack {
                     Spacer()
                     Button("Cancel") {
-                        viewModel.cancelDownload()
+                        cancelDownload()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)

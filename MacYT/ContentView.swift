@@ -97,7 +97,14 @@ struct MainAppView: View {
                 }
 
                 if viewModel.isDownloadActive || viewModel.appState == .completed {
-                    DownloadProgressView(viewModel: viewModel)
+                    DownloadProgressView(
+                        downloadManager: viewModel.downloadManager,
+                        isAudioMode: viewModel.downloadOptions.extractAudio,
+                        isDownloadActive: viewModel.isDownloadActive,
+                        startDownload: viewModel.startDownload,
+                        cancelDownload: viewModel.cancelDownload,
+                        resetSession: viewModel.reset
+                    )
                 }
             }
             .padding(.bottom, 116)
@@ -975,8 +982,8 @@ private extension AppViewModel {
     }
 
     var isDownloadActive: Bool {
-        switch downloadManager.status {
-        case .fetching, .downloading, .postProcessing:
+        switch appState {
+        case .downloading:
             return true
         default:
             return false

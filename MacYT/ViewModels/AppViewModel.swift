@@ -175,13 +175,6 @@ class AppViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
-
-        downloadManager.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
     }
 
     private func updateAppStateAfterDependencyCheck() {
