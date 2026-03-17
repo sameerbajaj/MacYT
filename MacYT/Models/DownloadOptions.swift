@@ -41,6 +41,31 @@ enum AudioBitratePreset: String, CaseIterable, Identifiable {
     }
 }
 
+enum VideoContainerPreference: String, CaseIterable, Identifiable {
+    case auto
+    case mp4
+    case mkv
+    case webm
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .auto: return "Auto"
+        case .mp4: return "MP4"
+        case .mkv: return "MKV"
+        case .webm: return "WebM"
+        }
+    }
+
+    var ytDLPMergeValue: String? {
+        switch self {
+        case .auto: return nil
+        case .mp4, .mkv, .webm: return rawValue
+        }
+    }
+}
+
 class DownloadOptions: ObservableObject {
     @Published var embedMetadata: Bool = true
     @Published var embedChapters: Bool = true
@@ -58,6 +83,7 @@ class DownloadOptions: ObservableObject {
     @Published var extractAudio: Bool = false
     @Published var audioFormat: String = "mp3"
     @Published var audioBitrate: AudioBitratePreset = .best
+    @Published var videoContainerPreference: VideoContainerPreference = .auto
     
     @Published var splitChapters: Bool = false
     @Published var outputDirectory: URL = DownloadOptions.defaultOutputDirectory()
@@ -67,7 +93,7 @@ class DownloadOptions: ObservableObject {
         extractAudio ? "Audio export" : "Video export"
     }
     
-    func commandLineFlags() -> [String] {
+    func commandLineFlags(requiresMerge: Bool) -> [String] {
         var flags: [String] = []
 
         DownloadOptions.ensureDirectoryExists(outputDirectory)
@@ -103,6 +129,8 @@ class DownloadOptions: ObservableObject {
             flags.append("-x")
             flags.append(contentsOf: ["--audio-format", audioFormat])
             flags.append(contentsOf: ["--audio-quality", audioBitrate.ytDLPValue])
+        } else if requiresMerge, let mergeContainer = videoContainerPreference.ytDLPMergeValue {
+            flags.append(contentsOf: ["--merge-output-format", mergeContainer])
         }
         
         if splitChapters {

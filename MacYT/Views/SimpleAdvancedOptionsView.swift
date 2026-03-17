@@ -32,6 +32,20 @@ struct SimpleAdvancedOptionsView: View {
 
             if showAdvanced {
                 VStack(alignment: .leading, spacing: MacYTSpacing.md) {
+                    if !options.extractAudio {
+                        HStack {
+                            Text("Video container")
+                            Spacer()
+                            Picker("Video container", selection: $options.videoContainerPreference) {
+                                ForEach(VideoContainerPreference.allCases) { preference in
+                                    Text(preference.label).tag(preference)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 220)
+                        }
+                    }
+
                     Toggle("Embed metadata", isOn: $options.embedMetadata)
                     Toggle("Embed chapters", isOn: $options.embedChapters)
                     Toggle("Embed thumbnail", isOn: $options.embedThumbnail)

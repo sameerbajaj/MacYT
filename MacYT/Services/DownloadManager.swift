@@ -17,21 +17,28 @@ class DownloadManager: ObservableObject {
     @Published var consoleLogs: [String] = []
     
     private var process: Process?
+    private var outputFlushTimer: DispatchSourceTimer?
     private var detectedOutputURL: URL?
     private var downloadStartedAt: Date?
-    private var lastKnownSpeed: String = "0.0B/s"
-    private var lastKnownETA: String = "Unknown"
+
+    private let outputParsingQueue = DispatchQueue(label: "luminoslabs.MacYT.download-output-parser")
+    private var bufferedChunkRemainder: String = ""
+    private var pendingConsoleLines: [String] = []
+    private var pendingStatus: DownloadStatus?
+    private var pendingDetectedOutputURL: URL?
+    private var pendingSpeed: String = "0.0B/s"
+    private var pendingETA: String = "Unknown"
     
     @MainActor
-    func startDownload(url: String, formatExpression: String?, options: DownloadOptions) async {
+    func startDownload(url: String, formatExpression: String?, requiresMerge: Bool, options: DownloadOptions) async {
         self.status = .fetching
         self.consoleLogs.removeAll()
+        self.currentLine = ""
         self.detectedOutputURL = nil
         self.downloadStartedAt = Date()
-        self.lastKnownSpeed = "0.0B/s"
-        self.lastKnownETA = "Unknown"
+        resetOutputParsingState()
         
-        var args = options.commandLineFlags()
+        var args = options.commandLineFlags(requiresMerge: requiresMerge)
         args.append(contentsOf: ["--print", "after_move:filepath"])
         if let ffmpegPath = DependencyChecker.shared.installedPath(for: "ffmpeg") {
             let ffmpegDirectory = URL(fileURLWithPath: ffmpegPath).deletingLastPathComponent().path
@@ -68,30 +75,24 @@ class DownloadManager: ObservableObject {
         pipe.fileHandleForReading.readabilityHandler = { fh in
             let data = fh.availableData
             if data.isEmpty { return }
-            if let string = String(data: data, encoding: .utf8) {
-                Task { @MainActor in
-                    self.processOutput(string)
-                }
-            }
+            self.enqueueOutputChunk(data)
         }
         errPipe.fileHandleForReading.readabilityHandler = { fh in
             let data = fh.availableData
             if data.isEmpty { return }
-            if let string = String(data: data, encoding: .utf8) {
-                Task { @MainActor in
-                    self.processOutput(string)
-                }
-            }
+            self.enqueueOutputChunk(data)
         }
         
         do {
             try process?.run()
             self.status = .downloading(percent: 0, speed: "0.0B/s", eta: "Unknown")
+            startOutputFlushTimer()
             
             let termStatus = await waitForProcessExit()
             
             pipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
+            stopOutputFlushTimer(flushRemainder: true)
             process = nil
             
             if termStatus == 0 {
@@ -107,11 +108,14 @@ class DownloadManager: ObservableObject {
             }
             
         } catch {
+            stopOutputFlushTimer(flushRemainder: true)
             self.status = .failed(error: error.localizedDescription)
         }
     }
     
+    @MainActor
     func cancelDownload() {
+        stopOutputFlushTimer(flushRemainder: true)
         process?.terminate()
         process = nil
         status = .cancelled
@@ -121,64 +125,159 @@ class DownloadManager: ObservableObject {
     private let speedRegex = try! NSRegularExpression(pattern: #"\sat\s+([a-zA-Z0-9.\/]+)"#)
     private let etaRegex = try! NSRegularExpression(pattern: #"\sETA\s+([0-9:]+)"#)
     
-    @MainActor
-    private func processOutput(_ text: String) {
-        let normalized = text.replacingOccurrences(of: "\r", with: "\n")
-        let lines = normalized.components(separatedBy: .newlines)
-        for line in lines where !line.isEmpty {
-            self.currentLine = line
-            self.consoleLogs.append(line)
-            captureOutputLocation(from: line)
-            if self.consoleLogs.count > 500 {
-                self.consoleLogs.removeFirst(self.consoleLogs.count - 500)
-            }
-            
-            // parsing logic
-            if line.contains("[Merger]") || line.contains("[ExtractAudio]") {
-                self.status = .postProcessing
-            } else if let match = progressRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
-                if let pctRange = Range(match.range(at: 1), in: line),
-                   let pct = Double(line[pctRange]) {
-                    if let speed = captureFirstGroup(from: speedRegex, in: line) {
-                        lastKnownSpeed = speed
-                    }
-                    if let eta = captureFirstGroup(from: etaRegex, in: line) {
-                        lastKnownETA = eta
-                    }
+    private func enqueueOutputChunk(_ data: Data) {
+        let text = String(decoding: data, as: UTF8.self)
+        outputParsingQueue.async {
+            self.processOutputChunk(text)
+        }
+    }
 
-                    let progress = max(0, min(1, pct / 100.0))
-                    if progress >= 1 && !line.contains("ETA") {
-                        self.status = .postProcessing
-                    } else {
-                        self.status = .downloading(percent: progress, speed: lastKnownSpeed, eta: lastKnownETA)
-                    }
-                }
+    private func processOutputChunk(_ chunk: String) {
+        let combined = bufferedChunkRemainder + chunk.replacingOccurrences(of: "\r", with: "\n")
+        let lines = combined.components(separatedBy: .newlines)
+        let hasTrailingNewline = combined.hasSuffix("\n")
+
+        if hasTrailingNewline {
+            bufferedChunkRemainder = ""
+        } else {
+            bufferedChunkRemainder = lines.last ?? ""
+        }
+
+        let completeLines = hasTrailingNewline ? lines : lines.dropLast()
+        for rawLine in completeLines {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            pendingConsoleLines.append(line)
+            updatePendingStatus(from: line)
+            if let detectedURL = captureOutputLocation(from: line) {
+                pendingDetectedOutputURL = detectedURL
             }
         }
     }
 
+    private func updatePendingStatus(from line: String) {
+        if line.contains("[Merger]") || line.contains("[ExtractAudio]") {
+            pendingStatus = .postProcessing
+            return
+        }
+
+        guard let match = progressRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+              let pctRange = Range(match.range(at: 1), in: line),
+              let pct = Double(line[pctRange]) else {
+            return
+        }
+
+        if let speed = captureFirstGroup(from: speedRegex, in: line) {
+            pendingSpeed = speed
+        }
+        if let eta = captureFirstGroup(from: etaRegex, in: line) {
+            pendingETA = eta
+        }
+
+        let progress = max(0, min(1, pct / 100.0))
+        if progress >= 1 && !line.contains("ETA") {
+            pendingStatus = .postProcessing
+        } else {
+            pendingStatus = .downloading(percent: progress, speed: pendingSpeed, eta: pendingETA)
+        }
+    }
+
     @MainActor
-    private func captureOutputLocation(from line: String) {
+    private func startOutputFlushTimer() {
+        stopOutputFlushTimer(flushRemainder: false)
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(120), leeway: .milliseconds(30))
+        timer.setEventHandler { [weak self] in
+            self?.flushPendingOutput(includeRemainder: false)
+        }
+        timer.resume()
+        outputFlushTimer = timer
+    }
+
+    @MainActor
+    private func stopOutputFlushTimer(flushRemainder: Bool) {
+        outputFlushTimer?.cancel()
+        outputFlushTimer = nil
+        if flushRemainder {
+            flushPendingOutput(includeRemainder: true)
+        }
+    }
+
+    @MainActor
+    private func flushPendingOutput(includeRemainder: Bool) {
+        let snapshot = outputParsingQueue.sync { () -> (lines: [String], status: DownloadStatus?, outputURL: URL?) in
+            if includeRemainder {
+                let remainder = bufferedChunkRemainder.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !remainder.isEmpty {
+                    pendingConsoleLines.append(remainder)
+                    updatePendingStatus(from: remainder)
+                    if let detectedURL = captureOutputLocation(from: remainder) {
+                        pendingDetectedOutputURL = detectedURL
+                    }
+                }
+                bufferedChunkRemainder = ""
+            }
+
+            let lines = pendingConsoleLines
+            let status = pendingStatus
+            let outputURL = pendingDetectedOutputURL
+            pendingConsoleLines.removeAll(keepingCapacity: true)
+            pendingStatus = nil
+            pendingDetectedOutputURL = nil
+            return (lines, status, outputURL)
+        }
+
+        guard !snapshot.lines.isEmpty || snapshot.status != nil || snapshot.outputURL != nil else {
+            return
+        }
+
+        if !snapshot.lines.isEmpty {
+            currentLine = snapshot.lines.last ?? currentLine
+            consoleLogs.append(contentsOf: snapshot.lines)
+            if consoleLogs.count > 500 {
+                consoleLogs.removeFirst(consoleLogs.count - 500)
+            }
+        }
+        if let outputURL = snapshot.outputURL {
+            detectedOutputURL = outputURL
+        }
+        if let status = snapshot.status {
+            self.status = status
+        }
+    }
+
+    private func resetOutputParsingState() {
+        outputParsingQueue.sync {
+            bufferedChunkRemainder = ""
+            pendingConsoleLines.removeAll(keepingCapacity: false)
+            pendingStatus = nil
+            pendingDetectedOutputURL = nil
+            pendingSpeed = "0.0B/s"
+            pendingETA = "Unknown"
+        }
+    }
+
+    private func captureOutputLocation(from line: String) -> URL? {
         let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if let path = existingFilePathIfAny(in: trimmedLine) {
-            detectedOutputURL = URL(fileURLWithPath: path)
-            return
+            return URL(fileURLWithPath: path)
         }
 
         if let path = quotedPath(in: line, prefix: "[Merger] Merging formats into ") {
-            detectedOutputURL = URL(fileURLWithPath: path)
-            return
+            return URL(fileURLWithPath: path)
         }
 
         if let path = plainPath(in: line, prefix: "[ExtractAudio] Destination: ") {
-            detectedOutputURL = URL(fileURLWithPath: path)
-            return
+            return URL(fileURLWithPath: path)
         }
 
         if let path = plainPath(in: line, prefix: "[download] Destination: ") {
-            detectedOutputURL = URL(fileURLWithPath: path)
+            return URL(fileURLWithPath: path)
         }
+
+        return nil
     }
 
     private func waitForProcessExit() async -> Int32 {

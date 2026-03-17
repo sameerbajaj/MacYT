@@ -115,13 +115,20 @@ struct FormatSelectionView: View {
 
     @ViewBuilder
     private var helperBanner: some View {
-        if let selectedFormat = viewModel.selectedVideoFormat {
-            if selectedFormat.isVideoOnly {
+        if let decision = viewModel.currentVideoSelectionDecision {
+            if decision.usedDirectFallback, let fallback = viewModel.selectedDirectFallbackFormat {
+                MacYTInlineBanner(
+                    icon: "checkmark.circle.fill",
+                    title: "Merge skipped for \(decision.selectedFormat.simplifiedQualityLabel)",
+                    message: "A direct \(fallback.displayContainer) stream with audio is available at this quality, so MacYT will use it and avoid FFmpeg merging.",
+                    tint: MacYTColors.success
+                )
+            } else if decision.needsMerge {
                 MacYTInlineBanner(
                     icon: checker.ffmpegStatus.isInstalled ? "arrow.triangle.merge" : "exclamationmark.triangle.fill",
-                    title: checker.ffmpegStatus.isInstalled ? "Merge needed for \(selectedFormat.simplifiedQualityLabel)" : "FFmpeg needed for \(selectedFormat.simplifiedQualityLabel)",
+                    title: checker.ffmpegStatus.isInstalled ? "Merge needed for \(decision.selectedFormat.simplifiedQualityLabel)" : "FFmpeg needed for \(decision.selectedFormat.simplifiedQualityLabel)",
                     message: checker.ffmpegStatus.isInstalled
-                        ? "This quality comes as a video-only stream. MacYT will pair it with the best audio track during export."
+                        ? "This quality is only available as video-only, so MacYT will pair it with the best audio track during export."
                         : "This quality comes as a video-only stream. Install or repair FFmpeg before exporting so MacYT can merge in the audio track.",
                     tint: checker.ffmpegStatus.isInstalled ? MacYTColors.warning : MacYTColors.destructive
                 )
@@ -129,7 +136,7 @@ struct FormatSelectionView: View {
                 MacYTInlineBanner(
                     icon: "checkmark.circle.fill",
                     title: "Audio already included",
-                    message: "\(selectedFormat.simplifiedQualityLabel) is available as a ready-to-download stream, so MacYT can save it without an extra merge step.",
+                    message: "\(decision.selectedFormat.simplifiedQualityLabel) is available as a ready-to-download stream, so MacYT can save it without an extra merge step.",
                     tint: MacYTColors.success
                 )
             }
@@ -277,6 +284,9 @@ private struct SimpleQualityRow: View {
 
     private var optionBadgeLabel: String {
         if option.needsAudioMerge {
+            if option.hasDirectOption {
+                return "Auto direct"
+            }
             return ffmpegInstalled ? "Merge needed" : "FFmpeg needed"
         }
 
@@ -285,6 +295,9 @@ private struct SimpleQualityRow: View {
 
     private var optionBadgeTint: Color {
         if option.needsAudioMerge {
+            if option.hasDirectOption {
+                return MacYTColors.success
+            }
             return ffmpegInstalled ? MacYTColors.warning : MacYTColors.destructive
         }
 

@@ -24,8 +24,11 @@ class AppViewModel: ObservableObject {
     
     var ytdlpService = YTDLPService.shared
     var downloadManager = DownloadManager()
+    private var cancellables = Set<AnyCancellable>()
     
     init() {
+        bindNestedObservableObjects()
+
         Task {
             await DependencyChecker.shared.checkAll()
             updateAppStateAfterDependencyCheck()
@@ -111,9 +114,15 @@ class AppViewModel: ObservableObject {
         appState = .downloading
         errorMessage = nil
         let formatExpression = effectiveFormatExpressionForCurrentMode()
+        let requiresMerge = currentSelectionNeedsMergeStep
         
         Task {
-            await downloadManager.startDownload(url: urlText, formatExpression: formatExpression, options: downloadOptions)
+            await downloadManager.startDownload(
+                url: urlText,
+                formatExpression: formatExpression,
+                requiresMerge: requiresMerge,
+                options: downloadOptions
+            )
              
             if case .completed = downloadManager.status {
                 appState = .completed
@@ -159,6 +168,22 @@ class AppViewModel: ObservableObject {
         downloadManager.status = .idle
     }
 
+    private func bindNestedObservableObjects() {
+        downloadOptions.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        downloadManager.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
+
     private func updateAppStateAfterDependencyCheck() {
         if DependencyChecker.shared.coreDependencyInstalled {
             appState = .ready
@@ -186,12 +211,12 @@ class AppViewModel: ObservableObject {
             return nil
         }
 
-        guard let selected = selectedVideoFormat else {
-            return preferredVideoFormatsForCurrentEnvironment().first.map(formatExpression(for:))
+        guard let decision = currentVideoSelectionDecision else {
+            return preferredVideoFormatsForCurrentEnvironment().first.map { formatExpression(for: $0, needsMerge: $0.isVideoOnly) }
                 ?? selectedFormatId
         }
 
-        return formatExpression(for: selected)
+        return formatExpression(for: decision.effectiveFormat, needsMerge: decision.needsMerge)
     }
 
     private func preferredVideoFormatsForCurrentEnvironment() -> [VideoFormat] {
@@ -217,16 +242,39 @@ class AppViewModel: ObservableObject {
         }
     }
 
-    private func formatExpression(for format: VideoFormat) -> String {
-        guard format.isVideoOnly else {
+    private func formatExpression(for format: VideoFormat, needsMerge: Bool) -> String {
+        guard needsMerge else {
             return format.formatId
         }
 
         return "\(format.formatId)+bestaudio/\(format.formatId)+ba/\(format.formatId)"
     }
+
+    private func bestDirectFallback(for format: VideoFormat) -> VideoFormat? {
+        let targetQuality = format.simplifiedQualityLabel
+        return formats
+            .filter { !$0.isAudioOnly && !$0.isVideoOnly && $0.simplifiedQualityLabel == targetQuality }
+            .sorted {
+                if ($0.height ?? 0) == ($1.height ?? 0) {
+                    if ($0.fps ?? 0) == ($1.fps ?? 0) {
+                        return ($0.tbr ?? 0) > ($1.tbr ?? 0)
+                    }
+                    return ($0.fps ?? 0) > ($1.fps ?? 0)
+                }
+                return ($0.height ?? 0) > ($1.height ?? 0)
+            }
+            .first
+    }
 }
 
 extension AppViewModel {
+    struct VideoSelectionDecision {
+        let selectedFormat: VideoFormat
+        let effectiveFormat: VideoFormat
+        let usedDirectFallback: Bool
+        let needsMerge: Bool
+    }
+
     var selectedVideoFormat: VideoFormat? {
         guard !downloadOptions.extractAudio else { return nil }
 
@@ -240,12 +288,55 @@ extension AppViewModel {
             ?? formats.first(where: { !$0.isAudioOnly })
     }
 
+    var currentVideoSelectionDecision: VideoSelectionDecision? {
+        guard !downloadOptions.extractAudio,
+              let selected = selectedVideoFormat else {
+            return nil
+        }
+
+        guard selected.isVideoOnly else {
+            return VideoSelectionDecision(
+                selectedFormat: selected,
+                effectiveFormat: selected,
+                usedDirectFallback: false,
+                needsMerge: false
+            )
+        }
+
+        if let directFallback = bestDirectFallback(for: selected) {
+            return VideoSelectionDecision(
+                selectedFormat: selected,
+                effectiveFormat: directFallback,
+                usedDirectFallback: true,
+                needsMerge: false
+            )
+        }
+
+        return VideoSelectionDecision(
+            selectedFormat: selected,
+            effectiveFormat: selected,
+            usedDirectFallback: false,
+            needsMerge: true
+        )
+    }
+
+    var selectedDirectFallbackFormat: VideoFormat? {
+        guard let decision = currentVideoSelectionDecision, decision.usedDirectFallback else {
+            return nil
+        }
+        return decision.effectiveFormat
+    }
+
+    var currentSelectionNeedsMergeStep: Bool {
+        currentVideoSelectionDecision?.needsMerge == true
+    }
+
     var currentSelectionRequiresFFmpeg: Bool {
         if downloadOptions.extractAudio {
             return true
         }
 
-        return selectedVideoFormat?.needsSeparateAudioMerge == true
+        return currentSelectionNeedsMergeStep
     }
 
     var ffmpegRequirementMessage: String {
@@ -253,11 +344,15 @@ extension AppViewModel {
             return DependencyChecker.shared.ffmpegWarningText ?? "FFmpeg is required for audio extraction."
         }
 
-        guard let selectedVideoFormat, selectedVideoFormat.isVideoOnly else {
+        guard let decision = currentVideoSelectionDecision else {
             return DependencyChecker.shared.ffmpegWarningText ?? "FFmpeg is required for this export."
         }
 
-        return "\(selectedVideoFormat.simplifiedQualityLabel) needs FFmpeg so MacYT can merge the video stream with audio."
+        if decision.needsMerge {
+            return "\(decision.selectedFormat.simplifiedQualityLabel) needs FFmpeg so MacYT can merge the video stream with audio."
+        }
+
+        return DependencyChecker.shared.ffmpegWarningText ?? "FFmpeg is required for this export."
     }
 
     var selectedQualitySummary: String {
@@ -265,11 +360,18 @@ extension AppViewModel {
             return "\(downloadOptions.audioFormat.uppercased()) • \(downloadOptions.audioBitrate.label)"
         }
 
-        guard let selectedVideoFormat else {
+        guard let decision = currentVideoSelectionDecision else {
             return "Auto selection"
         }
 
-        let suffix = selectedVideoFormat.isVideoOnly ? "Merge with audio" : "Audio included"
-        return "\(selectedVideoFormat.simplifiedQualityLabel) • \(suffix)"
+        let suffix: String
+        if decision.usedDirectFallback {
+            suffix = "Direct stream fallback"
+        } else if decision.needsMerge {
+            suffix = "Merge with audio"
+        } else {
+            suffix = "Audio included"
+        }
+        return "\(decision.selectedFormat.simplifiedQualityLabel) • \(suffix)"
     }
 }
