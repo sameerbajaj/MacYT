@@ -121,10 +121,10 @@ class DownloadManager: ObservableObject {
         status = .cancelled
     }
     
-    private let progressRegex = try! NSRegularExpression(pattern: #"\[download\]\s+(\d+(?:\.\d+)?)\%"#)
-    private let speedRegex = try! NSRegularExpression(pattern: #"\bat\s+(.+?)(?:\s+ETA\b|$)"#)
-    private let etaRegex = try! NSRegularExpression(pattern: #"\bETA\s+([0-9:]+|Unknown)"#)
-    private let ansiRegex = try! NSRegularExpression(pattern: #"\u{001B}\[[0-9;]*[A-Za-z]"#)
+    private let progressRegex = DownloadManager.compileRegex(#"\[download\]\s+(\d+(?:\.\d+)?)\%"#)
+    private let speedRegex = DownloadManager.compileRegex(#"\bat\s+(.+?)(?:\s+ETA\b|$)"#)
+    private let etaRegex = DownloadManager.compileRegex(#"\bETA\s+([0-9:]+|Unknown)"#)
+    private let ansiRegex = DownloadManager.compileRegex(#"\u{001B}\[[0-9;]*[A-Za-z]"#)
     
     private func enqueueOutputChunk(_ data: Data) {
         let text = String(decoding: data, as: UTF8.self)
@@ -358,14 +358,15 @@ class DownloadManager: ObservableObject {
     }
 
     private func parseDownloadProgressSnapshot(from line: String) -> DownloadProgressSnapshot? {
-        guard let match = progressRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+        guard let progressRegex,
+              let match = progressRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
               let pctRange = Range(match.range(at: 1), in: line),
               let pct = Double(line[pctRange]) else {
             return nil
         }
 
-        let speedCandidate = captureFirstGroup(from: speedRegex, in: line) ?? pendingSpeed
-        let etaCandidate = captureFirstGroup(from: etaRegex, in: line) ?? pendingETA
+        let speedCandidate = speedRegex.flatMap { captureFirstGroup(from: $0, in: line) } ?? pendingSpeed
+        let etaCandidate = etaRegex.flatMap { captureFirstGroup(from: $0, in: line) } ?? pendingETA
 
         return DownloadProgressSnapshot(
             percent: pct,
@@ -375,6 +376,7 @@ class DownloadManager: ObservableObject {
     }
 
     private func sanitizeOutputLine(_ line: String) -> String {
+        guard let ansiRegex else { return line }
         let range = NSRange(line.startIndex..., in: line)
         let stripped = ansiRegex.stringByReplacingMatches(in: line, range: range, withTemplate: "")
         return stripped.replacingOccurrences(of: "\u{00A0}", with: " ")
@@ -391,6 +393,10 @@ class DownloadManager: ObservableObject {
     private func normalizeETALabel(_ label: String) -> String {
         let cleaned = label.trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "Unknown" : cleaned
+    }
+
+    private static func compileRegex(_ pattern: String) -> NSRegularExpression? {
+        try? NSRegularExpression(pattern: pattern)
     }
 
     private func plainPath(in line: String, prefix: String) -> String? {
