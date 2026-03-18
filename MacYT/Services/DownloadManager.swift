@@ -16,6 +16,7 @@ class DownloadManager: ObservableObject {
     private(set) var currentLine: String = ""
     private(set) var consoleLogs: [String] = []
     private let progressMarker = "[MACYT_PROGRESS]"
+    private let debugLogQueue = DispatchQueue(label: "luminoslabs.MacYT.download-debug-log")
     
     private var process: Process?
     private var outputFlushTimer: DispatchSourceTimer?
@@ -38,6 +39,8 @@ class DownloadManager: ObservableObject {
         self.detectedOutputURL = nil
         self.downloadStartedAt = Date()
         resetOutputParsingState()
+        resetDebugLog()
+        writeDebugLog("session.start url=\(url) requiresMerge=\(requiresMerge) extractAudio=\(options.extractAudio)")
         
         var args = options.commandLineFlags(requiresMerge: requiresMerge)
         args.append(contentsOf: [
@@ -57,8 +60,10 @@ class DownloadManager: ObservableObject {
         }
         
         args.append(url)
-        
+
         let path = DependencyChecker.shared.getExecutablePath(for: "yt-dlp")
+        writeDebugLog("process.path \(path)")
+        writeDebugLog("process.args \(args.joined(separator: " "))")
         
         process = Process()
         process?.executableURL = URL(fileURLWithPath: path)
@@ -91,9 +96,11 @@ class DownloadManager: ObservableObject {
         do {
             try process?.run()
             self.status = .downloading(percent: 0, speed: "0.0B/s", eta: "Unknown")
+            writeDebugLog("status.publish downloading percent=0 speed=0.0B/s eta=Unknown reason=initial")
             startOutputFlushTimer()
             
             let termStatus = await waitForProcessExit()
+            writeDebugLog("process.exit code=\(termStatus)")
             
             pipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
@@ -105,16 +112,20 @@ class DownloadManager: ObservableObject {
                     DownloadHistoryStore.shared.recordDownload(at: resolvedOutputURL, sourceURL: url)
                     DownloadHistoryStore.shared.refresh()
                     self.status = .completed(filePath: resolvedOutputURL.path)
+                    writeDebugLog("status.publish completed path=\(resolvedOutputURL.path)")
                 } else {
                     self.status = .failed(error: "Download finished, but MacYT could not locate the exported file.")
+                    writeDebugLog("status.publish failed reason=missing_output_file")
                 }
             } else if status != .cancelled {
                 self.status = .failed(error: "yt-dlp exited with code \(termStatus)")
+                writeDebugLog("status.publish failed reason=termination_code_\(termStatus)")
             }
             
         } catch {
             stopOutputFlushTimer(flushRemainder: true)
             self.status = .failed(error: error.localizedDescription)
+            writeDebugLog("status.publish failed reason=launch_error message=\(error.localizedDescription)")
         }
     }
     
@@ -124,10 +135,12 @@ class DownloadManager: ObservableObject {
         process?.terminate()
         process = nil
         status = .cancelled
+        writeDebugLog("status.publish cancelled")
     }
     
     private func enqueueOutputChunk(_ data: Data) {
         let text = String(decoding: data, as: UTF8.self)
+        writeDebugLog("chunk.raw \(debugEscaped(text))")
         outputParsingQueue.async {
             self.processOutputChunk(text)
         }
@@ -148,6 +161,7 @@ class DownloadManager: ObservableObject {
         for rawLine in completeLines {
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !line.isEmpty else { continue }
+            writeDebugLog("line.raw \(debugEscaped(rawLine))")
             if shouldPersistConsoleLine(line) {
                 pendingConsoleLines.append(line)
             }
@@ -159,34 +173,56 @@ class DownloadManager: ObservableObject {
 
         let partialLine = bufferedChunkRemainder.trimmingCharacters(in: .whitespacesAndNewlines)
         if !partialLine.isEmpty {
+            writeDebugLog("line.partial \(debugEscaped(partialLine))")
             updatePendingStatus(from: partialLine)
         }
     }
 
     private func updatePendingStatus(from line: String) {
         let normalizedLine = sanitizeOutputLine(line)
+        writeDebugLog("line.sanitized \(debugEscaped(normalizedLine))")
 
         guard !normalizedLine.isEmpty else { return }
 
         if normalizedLine.contains("[Merger]") || normalizedLine.contains("[ExtractAudio]") {
             pendingStatus = .postProcessing
+            writeDebugLog("status.pending postProcessing source=postprocess_line")
             return
         }
 
-        guard let snapshot = parseStructuredProgressSnapshot(from: normalizedLine)
-            ?? parseDownloadProgressSnapshot(from: normalizedLine) else {
+        if let snapshot = parseStructuredProgressSnapshot(from: normalizedLine) {
+            pendingSpeed = snapshot.speed
+            pendingETA = snapshot.eta
+
+            let progress = max(0, min(1, snapshot.percent / 100.0))
+            writeDebugLog("progress.structured percent=\(snapshot.percent) speed=\(snapshot.speed) eta=\(snapshot.eta)")
+            if progress >= 1 && !normalizedLine.contains("ETA") {
+                pendingStatus = .postProcessing
+                writeDebugLog("status.pending postProcessing source=structured_progress_complete")
+            } else {
+                pendingStatus = .downloading(percent: progress, speed: pendingSpeed, eta: pendingETA)
+                writeDebugLog("status.pending downloading percent=\(progress) speed=\(pendingSpeed) eta=\(pendingETA) source=structured_progress")
+            }
             return
         }
 
-        pendingSpeed = snapshot.speed
-        pendingETA = snapshot.eta
+        if let snapshot = parseDownloadProgressSnapshot(from: normalizedLine) {
+            pendingSpeed = snapshot.speed
+            pendingETA = snapshot.eta
 
-        let progress = max(0, min(1, snapshot.percent / 100.0))
-        if progress >= 1 && !normalizedLine.contains("ETA") {
-            pendingStatus = .postProcessing
-        } else {
-            pendingStatus = .downloading(percent: progress, speed: pendingSpeed, eta: pendingETA)
+            let progress = max(0, min(1, snapshot.percent / 100.0))
+            writeDebugLog("progress.fallback percent=\(snapshot.percent) speed=\(snapshot.speed) eta=\(snapshot.eta)")
+            if progress >= 1 && !normalizedLine.contains("ETA") {
+                pendingStatus = .postProcessing
+                writeDebugLog("status.pending postProcessing source=fallback_progress_complete")
+            } else {
+                pendingStatus = .downloading(percent: progress, speed: pendingSpeed, eta: pendingETA)
+                writeDebugLog("status.pending downloading percent=\(progress) speed=\(pendingSpeed) eta=\(pendingETA) source=fallback_progress")
+            }
+            return
         }
+
+        writeDebugLog("progress.none")
     }
 
     @MainActor
@@ -248,10 +284,12 @@ class DownloadManager: ObservableObject {
         }
         if let outputURL = snapshot.outputURL {
             detectedOutputURL = outputURL
+            writeDebugLog("output.detected \(outputURL.path)")
         }
         if let status = snapshot.status {
             if self.status != status {
                 self.status = status
+                writeDebugLog("status.publish \(describe(status))")
             }
         }
     }
@@ -485,6 +523,76 @@ class DownloadManager: ObservableObject {
         guard let endIndex = remainder[startIndex...].firstIndex(of: "\"") else { return nil }
 
         return String(remainder[startIndex..<endIndex])
+    }
+
+    private func resetDebugLog() {
+        debugLogQueue.async {
+            guard let url = self.debugLogURL() else { return }
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data().write(to: url, options: .atomic)
+        }
+    }
+
+    private func writeDebugLog(_ message: String) {
+        debugLogQueue.async {
+            guard let url = self.debugLogURL() else { return }
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+            let line = "[\(timestamp)] \(message)\n"
+            guard let data = line.data(using: .utf8) else { return }
+
+            if !FileManager.default.fileExists(atPath: url.path) {
+                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                FileManager.default.createFile(atPath: url.path, contents: nil)
+            }
+
+            do {
+                let handle = try FileHandle(forWritingTo: url)
+                try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+                try handle.close()
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func debugLogURL() -> URL? {
+        let appSupport = try? FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        return appSupport?
+            .appendingPathComponent("MacYT", isDirectory: true)
+            .appendingPathComponent("download-debug.log")
+    }
+
+    private func debugEscaped(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
+    }
+
+    private func describe(_ status: DownloadStatus) -> String {
+        switch status {
+        case .idle:
+            return "idle"
+        case .fetching:
+            return "fetching"
+        case let .downloading(percent, speed, eta):
+            return "downloading percent=\(percent) speed=\(speed) eta=\(eta)"
+        case .postProcessing:
+            return "postProcessing"
+        case let .completed(filePath):
+            return "completed path=\(filePath)"
+        case let .failed(error):
+            return "failed error=\(error)"
+        case .cancelled:
+            return "cancelled"
+        }
     }
 }
 
