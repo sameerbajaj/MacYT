@@ -44,7 +44,9 @@ class DownloadManager: ObservableObject {
         
         var args = options.commandLineFlags(requiresMerge: requiresMerge)
         args.append(contentsOf: [
+            "--progress",
             "--newline",
+            "--progress-delta", "0.25",
             "--progress-template", "download:\(progressMarker)%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"
         ])
         args.append(contentsOf: ["--print", "after_move:filepath"])
