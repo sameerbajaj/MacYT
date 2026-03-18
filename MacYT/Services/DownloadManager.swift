@@ -13,8 +13,9 @@ enum DownloadStatus: Equatable {
 
 class DownloadManager: ObservableObject {
     @Published var status: DownloadStatus = .idle
-    @Published var currentLine: String = ""
-    @Published var consoleLogs: [String] = []
+    private(set) var currentLine: String = ""
+    private(set) var consoleLogs: [String] = []
+    private let progressMarker = "[MACYT_PROGRESS]"
     
     private var process: Process?
     private var outputFlushTimer: DispatchSourceTimer?
@@ -39,6 +40,10 @@ class DownloadManager: ObservableObject {
         resetOutputParsingState()
         
         var args = options.commandLineFlags(requiresMerge: requiresMerge)
+        args.append(contentsOf: [
+            "--newline",
+            "--progress-template", "download:\(progressMarker)%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"
+        ])
         args.append(contentsOf: ["--print", "after_move:filepath"])
         if let ffmpegPath = DependencyChecker.shared.installedPath(for: "ffmpeg") {
             let ffmpegDirectory = URL(fileURLWithPath: ffmpegPath).deletingLastPathComponent().path
@@ -121,11 +126,6 @@ class DownloadManager: ObservableObject {
         status = .cancelled
     }
     
-    private let progressRegex = DownloadManager.compileRegex(#"\[download\]\s+(\d+(?:\.\d+)?)\%"#)
-    private let speedRegex = DownloadManager.compileRegex(#"\bat\s+(.+?)(?:\s+ETA\b|$)"#)
-    private let etaRegex = DownloadManager.compileRegex(#"\bETA\s+([0-9:]+|Unknown)"#)
-    private let ansiRegex = DownloadManager.compileRegex(#"\u{001B}\[[0-9;]*[A-Za-z]"#)
-    
     private func enqueueOutputChunk(_ data: Data) {
         let text = String(decoding: data, as: UTF8.self)
         outputParsingQueue.async {
@@ -148,7 +148,9 @@ class DownloadManager: ObservableObject {
         for rawLine in completeLines {
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !line.isEmpty else { continue }
-            pendingConsoleLines.append(line)
+            if shouldPersistConsoleLine(line) {
+                pendingConsoleLines.append(line)
+            }
             updatePendingStatus(from: line)
             if let detectedURL = captureOutputLocation(from: line) {
                 pendingDetectedOutputURL = detectedURL
@@ -166,12 +168,13 @@ class DownloadManager: ObservableObject {
 
         guard !normalizedLine.isEmpty else { return }
 
-        if line.contains("[Merger]") || line.contains("[ExtractAudio]") {
+        if normalizedLine.contains("[Merger]") || normalizedLine.contains("[ExtractAudio]") {
             pendingStatus = .postProcessing
             return
         }
 
-        guard let snapshot = parseDownloadProgressSnapshot(from: normalizedLine) else {
+        guard let snapshot = parseStructuredProgressSnapshot(from: normalizedLine)
+            ?? parseDownloadProgressSnapshot(from: normalizedLine) else {
             return
         }
 
@@ -191,7 +194,7 @@ class DownloadManager: ObservableObject {
         stopOutputFlushTimer(flushRemainder: false)
 
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(180), leeway: .milliseconds(40))
+        timer.schedule(deadline: .now(), repeating: .milliseconds(300), leeway: .milliseconds(75))
         timer.setEventHandler { [weak self] in
             self?.flushPendingOutput(includeRemainder: false)
         }
@@ -247,7 +250,9 @@ class DownloadManager: ObservableObject {
             detectedOutputURL = outputURL
         }
         if let status = snapshot.status {
-            self.status = status
+            if self.status != status {
+                self.status = status
+            }
         }
     }
 
@@ -260,6 +265,18 @@ class DownloadManager: ObservableObject {
             pendingSpeed = "0.0B/s"
             pendingETA = "Unknown"
         }
+    }
+
+    private func shouldPersistConsoleLine(_ line: String) -> Bool {
+        let normalizedLine = sanitizeOutputLine(line)
+        return !isDownloadProgressTelemetryLine(normalizedLine)
+    }
+
+    private func isDownloadProgressTelemetryLine(_ line: String) -> Bool {
+        if line.contains(progressMarker) {
+            return true
+        }
+        return line.contains("[download]") && line.contains("%")
     }
 
     private func captureOutputLocation(from line: String) -> URL? {
@@ -349,24 +366,22 @@ class DownloadManager: ObservableObject {
         return isRegularFile(url) ? candidatePath : nil
     }
 
-    private func captureFirstGroup(from regex: NSRegularExpression, in line: String) -> String? {
-        guard let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-              let range = Range(match.range(at: 1), in: line) else {
-            return nil
-        }
-        return String(line[range]).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     private func parseDownloadProgressSnapshot(from line: String) -> DownloadProgressSnapshot? {
-        guard let progressRegex,
-              let match = progressRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-              let pctRange = Range(match.range(at: 1), in: line),
-              let pct = Double(line[pctRange]) else {
+        guard let downloadRange = line.range(of: "[download]"),
+              let percentIndex = line[downloadRange.lowerBound...].firstIndex(of: "%") else {
             return nil
         }
 
-        let speedCandidate = speedRegex.flatMap { captureFirstGroup(from: $0, in: line) } ?? pendingSpeed
-        let etaCandidate = etaRegex.flatMap { captureFirstGroup(from: $0, in: line) } ?? pendingETA
+        let prefix = line[downloadRange.lowerBound..<percentIndex]
+        let tokens = prefix.split(whereSeparator: { !$0.isNumber && $0 != "." })
+        guard let pctToken = tokens.last,
+              let pct = Double(pctToken) else {
+            return nil
+        }
+
+        let downloadSegment = line[downloadRange.lowerBound...]
+        let speedCandidate = extractSpeed(from: String(downloadSegment)) ?? pendingSpeed
+        let etaCandidate = extractETA(from: String(downloadSegment)) ?? pendingETA
 
         return DownloadProgressSnapshot(
             percent: pct,
@@ -375,11 +390,34 @@ class DownloadManager: ObservableObject {
         )
     }
 
+    private func parseStructuredProgressSnapshot(from line: String) -> DownloadProgressSnapshot? {
+        guard let markerRange = line.range(of: progressMarker) else {
+            return nil
+        }
+
+        let payload = line[markerRange.upperBound...]
+        let parts = payload.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).map {
+            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        guard let percentPart = parts.first else { return nil }
+        let tokens = percentPart.split(whereSeparator: { !$0.isNumber && $0 != "." })
+        guard let percentToken = tokens.last, let percent = Double(percentToken) else {
+            return nil
+        }
+
+        let speed = parts.count > 1 ? parts[1] : pendingSpeed
+        let eta = parts.count > 2 ? parts[2] : pendingETA
+
+        return DownloadProgressSnapshot(
+            percent: percent,
+            speed: normalizeSpeedLabel(speed),
+            eta: normalizeETALabel(eta)
+        )
+    }
+
     private func sanitizeOutputLine(_ line: String) -> String {
-        guard let ansiRegex else { return line }
-        let range = NSRange(line.startIndex..., in: line)
-        let stripped = ansiRegex.stringByReplacingMatches(in: line, range: range, withTemplate: "")
-        return stripped.replacingOccurrences(of: "\u{00A0}", with: " ")
+        stripANSIEscapes(line).replacingOccurrences(of: "\u{00A0}", with: " ")
     }
 
     private func normalizeSpeedLabel(_ label: String) -> String {
@@ -395,8 +433,41 @@ class DownloadManager: ObservableObject {
         return cleaned.isEmpty ? "Unknown" : cleaned
     }
 
-    private static func compileRegex(_ pattern: String) -> NSRegularExpression? {
-        try? NSRegularExpression(pattern: pattern)
+    private func extractSpeed(from line: String) -> String? {
+        guard let atRange = line.range(of: " at ") else { return nil }
+        let afterAt = line[atRange.upperBound...]
+        if let etaRange = afterAt.range(of: " ETA ") {
+            return String(afterAt[..<etaRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return String(afterAt).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func extractETA(from line: String) -> String? {
+        guard let etaRange = line.range(of: " ETA ") else { return nil }
+        return String(line[etaRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func stripANSIEscapes(_ text: String) -> String {
+        var result = ""
+        var isEscaping = false
+
+        for character in text {
+            if isEscaping {
+                if character.isLetter {
+                    isEscaping = false
+                }
+                continue
+            }
+
+            if character == "\u{1B}" {
+                isEscaping = true
+                continue
+            }
+
+            result.append(character)
+        }
+
+        return result
     }
 
     private func plainPath(in line: String, prefix: String) -> String? {
