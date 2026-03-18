@@ -1,6 +1,6 @@
 import Foundation
 
-struct VideoFormat: Codable, Identifiable {
+struct VideoFormat: Codable, Identifiable, Equatable {
     let formatId: String
     let ext: String
     let resolution: String?
@@ -65,14 +65,7 @@ struct VideoFormat: Codable, Identifiable {
 
     func humanFileSize(duration: Double?) -> String {
         guard let size = estimatedSizeBytes(duration: duration) else { return "Unknown" }
-
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB, .useGB]
-        formatter.countStyle = .file
-        formatter.includesUnit = true
-        formatter.isAdaptive = true
-
-        let label = formatter.string(fromByteCount: size)
+        let label = Self.fileSizeFormatter.string(fromByteCount: size)
         return sizeBytes == nil ? "~\(label)" : label
     }
     
@@ -134,4 +127,13 @@ struct VideoFormat: Codable, Identifiable {
     var needsSeparateAudioMerge: Bool {
         isVideoOnly
     }
+
+    private static let fileSizeFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.countStyle = .file
+        formatter.includesUnit = true
+        formatter.isAdaptive = true
+        return formatter
+    }()
 }

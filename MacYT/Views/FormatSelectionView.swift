@@ -4,6 +4,8 @@ struct FormatSelectionView: View {
     @ObservedObject var viewModel: AppViewModel
     @ObservedObject private var checker = DependencyChecker.shared
     @State private var showAdvancedStreams = false
+    @State private var simpleQualityOptionsCache: [VideoQualityOption] = []
+    @State private var advancedFormatsCache: [VideoFormat] = []
     
     var body: some View {
         VStack(alignment: .leading, spacing: MacYTSpacing.lg) {
@@ -76,28 +78,18 @@ struct FormatSelectionView: View {
         }
         .padding(MacYTSpacing.xl)
         .macYTCard()
+        .onAppear(perform: rebuildFormatCaches)
+        .onChange(of: viewModel.formats) { _, _ in
+            rebuildFormatCaches()
+        }
     }
 
     private var simpleQualityOptions: [VideoQualityOption] {
-        let grouped = Dictionary(grouping: viewModel.formats.filter { !$0.isAudioOnly }) { $0.simplifiedQualityLabel }
-
-        return grouped.compactMap { qualityLabel, formats in
-            guard let representative = representativeFormat(from: formats) else {
-                return nil
-            }
-
-            return VideoQualityOption(label: qualityLabel, formats: formats, representative: representative)
-        }
-        .sorted { lhs, rhs in
-            if lhs.sortHeight == rhs.sortHeight {
-                return lhs.label > rhs.label
-            }
-            return lhs.sortHeight > rhs.sortHeight
-        }
+        simpleQualityOptionsCache
     }
 
     private var advancedFormats: [VideoFormat] {
-        preferredDisplayOrder(for: viewModel.formats.filter { !$0.isAudioOnly })
+        advancedFormatsCache
     }
 
     private var selectedQualityKey: String? {
@@ -168,6 +160,26 @@ struct FormatSelectionView: View {
             return ($0.height ?? 0) > ($1.height ?? 0)
         }
         .first
+    }
+
+    private func rebuildFormatCaches() {
+        let videoFormats = viewModel.formats.filter { !$0.isAudioOnly }
+        advancedFormatsCache = preferredDisplayOrder(for: videoFormats)
+
+        let grouped = Dictionary(grouping: videoFormats) { $0.simplifiedQualityLabel }
+        simpleQualityOptionsCache = grouped.compactMap { qualityLabel, formats in
+            guard let representative = representativeFormat(from: formats) else {
+                return nil
+            }
+
+            return VideoQualityOption(label: qualityLabel, formats: formats, representative: representative)
+        }
+        .sorted { lhs, rhs in
+            if lhs.sortHeight == rhs.sortHeight {
+                return lhs.label > rhs.label
+            }
+            return lhs.sortHeight > rhs.sortHeight
+        }
     }
 
     private var emptyState: some View {
