@@ -1,6 +1,8 @@
 # MacYT
 
-A macOS app for downloading YouTube videos and audio. Paste a link, pick a format, export.
+A native macOS GUI for yt-dlp. Paste a YouTube link, pick a format, export.
+
+If you've been running yt-dlp from the terminal and want a proper macOS app instead, this is it.
 
 ## What it does
 
@@ -52,3 +54,7 @@ Build and run the `MacYT` scheme in Xcode. No package manager or extra setup nee
 ## License
 
 MIT
+
+---
+
+*Keywords: yt-dlp GUI, yt-dlp macOS, YouTube downloader macOS, yt-dlp frontend, yt-dlp graphical interface*
