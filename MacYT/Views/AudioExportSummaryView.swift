@@ -20,10 +20,12 @@ struct AudioExportSummaryView: View {
                     summaryChip(icon: "arrow.trianglehead.2.clockwise", label: "Auto source")
                 }
 
+                formatControls
+
                 MacYTInlineBanner(
                     icon: "waveform.circle.fill",
                     title: "Audio sources only",
-                    message: "These are the best source audio streams yt-dlp reported for this video. MacYT picks from these, then converts to your chosen output format.",
+                    message: "These are the best source audio streams yt-dlp reported for this media. MacYT grabs the best source and converts it to \(options.audioFormat.uppercased()) (\(options.audioBitrate.label)).",
                     tint: MacYTColors.accentGradientEnd
                 )
 
@@ -67,6 +69,74 @@ struct AudioExportSummaryView: View {
 
     private func summaryChip(icon: String, label: String) -> some View {
         MacYTInfoChip(icon: icon, label: label, tint: MacYTColors.textPrimary)
+    }
+
+    private var formatControls: some View {
+        VStack(alignment: .leading, spacing: MacYTSpacing.md) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: MacYTSpacing.md) {
+                    Text("Target Format")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(MacYTColors.textPrimary)
+
+                    Spacer(minLength: MacYTSpacing.sm)
+
+                    Picker("Format", selection: $options.audioFormat) {
+                        Text("MP3").tag("mp3")
+                        Text("M4A").tag("m4a")
+                        Text("FLAC").tag("flac")
+                        Text("AAC").tag("aac")
+                        Text("WAV").tag("wav")
+                        Text("Opus").tag("opus")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 340)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Target Format")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(MacYTColors.textPrimary)
+
+                    Picker("Format", selection: $options.audioFormat) {
+                        Text("MP3").tag("mp3")
+                        Text("M4A").tag("m4a")
+                        Text("FLAC").tag("flac")
+                        Text("AAC").tag("aac")
+                        Text("WAV").tag("wav")
+                        Text("Opus").tag("opus")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+            }
+            .macYTControlSurface()
+
+            HStack(spacing: MacYTSpacing.md) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Quality / Bitrate")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(MacYTColors.textPrimary)
+                    Text(options.audioBitrate.description)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundColor(MacYTColors.textSecondary)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer(minLength: MacYTSpacing.sm)
+
+                Picker("Bitrate", selection: $options.audioBitrate) {
+                    ForEach(AudioBitratePreset.allCases) { preset in
+                        Text(preset.label).tag(preset)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 120)
+            }
+            .macYTControlSurface()
+        }
     }
 }
 

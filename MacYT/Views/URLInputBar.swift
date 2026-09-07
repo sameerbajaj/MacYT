@@ -21,7 +21,9 @@ struct URLInputBar: View {
                         Text("Audio").tag(true)
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 220)
+                    .labelsHidden()
+                    .frame(width: 180)
+                    .disabled(viewModel.isDownloadActive)
 
                     Spacer(minLength: 0)
                 }
@@ -33,21 +35,37 @@ struct URLInputBar: View {
                     .tracking(1.6)
                     .foregroundColor(MacYTColors.accentGradientEnd)
 
-                HStack(alignment: .center, spacing: MacYTSpacing.lg) {
-                    VStack(alignment: .leading, spacing: 4) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: MacYTSpacing.lg) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Inspect a link")
+                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .foregroundColor(MacYTColors.textPrimary)
+
+                            Text("Paste a YouTube link to inspect formats, choose quality, and export.")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundColor(MacYTColors.textSecondary)
+                        }
+
+                        Spacer(minLength: MacYTSpacing.md)
+
+                        if !viewModel.urlText.isEmpty {
+                            MacYTInfoChip(icon: "link", label: "Link staged", tint: MacYTColors.accentGradientEnd)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: MacYTSpacing.sm) {
                         Text("Inspect a link")
                             .font(.system(size: 24, weight: .bold, design: .rounded))
                             .foregroundColor(MacYTColors.textPrimary)
 
-                        Text("Paste a URL, preview the media, then head to Downloads only when the source looks right.")
+                        Text("Paste a YouTube link to inspect formats, choose quality, and export.")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundColor(MacYTColors.textSecondary)
-                    }
 
-                    Spacer(minLength: MacYTSpacing.md)
-
-                    if !viewModel.urlText.isEmpty {
-                        MacYTInfoChip(icon: "link", label: "Link staged", tint: MacYTColors.accentGradientEnd)
+                        if !viewModel.urlText.isEmpty {
+                            MacYTInfoChip(icon: "link", label: "Link staged", tint: MacYTColors.accentGradientEnd)
+                        }
                     }
                 }
             }
@@ -65,7 +83,7 @@ struct URLInputBar: View {
                         .onSubmit {
                             viewModel.fetchVideoInfo()
                         }
-                        .disabled(viewModel.appState == .fetchingInfo || viewModel.appState == .downloading)
+                        .disabled(viewModel.appState == .fetchingInfo || viewModel.isDownloadActive)
 
                     if !viewModel.urlText.isEmpty {
                         Button {
@@ -75,6 +93,7 @@ struct URLInputBar: View {
                                 .foregroundColor(MacYTColors.textTertiary)
                         }
                         .buttonStyle(.plain)
+                        .disabled(viewModel.isDownloadActive)
                     }
                 }
                 .frame(height: 52)
@@ -106,6 +125,7 @@ struct URLInputBar: View {
                 }
                 .buttonStyle(.plain)
                 .help("Paste from Clipboard")
+                .disabled(viewModel.appState == .fetchingInfo || viewModel.isDownloadActive)
 
                 GradientButton(
                     title: "Inspect",
@@ -115,6 +135,7 @@ struct URLInputBar: View {
                     viewModel.fetchVideoInfo()
                 }
                 .frame(height: 52)
+                .disabled(viewModel.isDownloadActive)
             }
         }
         .padding(.horizontal, MacYTSpacing.xl)

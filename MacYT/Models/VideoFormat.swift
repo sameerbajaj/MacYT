@@ -97,10 +97,12 @@ struct VideoFormat: Codable, Identifiable, Equatable {
         }
 
         switch height {
-        case 2160...:
+        case 4320...:
+            return "8K"
+        case 2160..<4320:
             return "4K"
         case 1440..<2160:
-            return "2K"
+            return "1440p"
         case 1080..<1440:
             return "1080p"
         case 720..<1080:

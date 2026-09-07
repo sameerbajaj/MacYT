@@ -3,90 +3,109 @@ import SwiftUI
 struct DependencyStatusView: View {
     @ObservedObject var viewModel: AppViewModel
     @ObservedObject var checker = DependencyChecker.shared
+    var onDismiss: (() -> Void)? = nil
     
     var body: some View {
-        VStack(spacing: MacYTSpacing.xl) {
-            Spacer(minLength: MacYTSpacing.xl)
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: MacYTSpacing.xl) {
+                Spacer(minLength: MacYTSpacing.md)
 
-            VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("MacYT Diagnostics")
-                            .font(.system(size: 42, weight: .heavy, design: .rounded))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [MacYTColors.textPrimary, MacYTColors.accentGradientEnd],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+                VStack(alignment: .leading, spacing: MacYTSpacing.xl) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("MacYT Diagnostics")
+                                .font(.system(size: 38, weight: .heavy, design: .rounded))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [MacYTColors.textPrimary, MacYTColors.accentGradientEnd],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
                                 )
-                            )
 
-                        Text("Before the export studio opens, MacYT verifies the command-line tools it depends on. Right now the blocker is `yt-dlp`. FFmpeg is also checked here so you can diagnose it early.")
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundColor(MacYTColors.textSecondary)
-                            .frame(maxWidth: 560, alignment: .leading)
+                            Text(diagnosticSubtitle)
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundColor(MacYTColors.textSecondary)
+                                .frame(maxWidth: 560, alignment: .leading)
+                        }
+
+                        Spacer()
+
+                        VStack(alignment: .trailing, spacing: MacYTSpacing.md) {
+                            if let onDismiss {
+                                Button("Done") {
+                                    onDismiss()
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(MacYTColors.accentGradientEnd)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 7)
+                                .background(MacYTColors.accentGradientEnd.opacity(0.14), in: Capsule(style: .continuous))
+                            }
+
+                            Image(systemName: "waveform.badge.magnifyingglass")
+                                .font(.system(size: 38, weight: .semibold))
+                                .foregroundColor(MacYTColors.accentGradientEnd)
+                                .padding(16)
+                                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        }
                     }
 
-                    Spacer()
+                    VStack(spacing: MacYTSpacing.md) {
+                        DependencyDiagnosticRow(name: "yt-dlp", status: checker.ytdlpStatus)
+                        DependencyDiagnosticRow(name: "FFmpeg", status: checker.ffmpegStatus)
+                    }
 
-                    Image(systemName: "waveform.badge.magnifyingglass")
-                        .font(.system(size: 44, weight: .semibold))
-                        .foregroundColor(MacYTColors.accentGradientEnd)
-                        .padding(18)
-                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                }
+                    if !checker.coreDependencyInstalled {
+                        MacYTInlineBanner(
+                            icon: "terminal.fill",
+                            title: "Install or repair the required tools",
+                            message: checker.unresolvedDependenciesDescription,
+                            tint: MacYTColors.warning
+                        )
 
-                VStack(spacing: MacYTSpacing.md) {
-                    DependencyDiagnosticRow(name: "yt-dlp", status: checker.ytdlpStatus)
-                    DependencyDiagnosticRow(name: "FFmpeg", status: checker.ffmpegStatus)
-                }
+                        HStack(spacing: MacYTSpacing.md) {
+                            commandChip(command: "brew install yt-dlp ffmpeg")
 
-                if !checker.coreDependencyInstalled {
-                    MacYTInlineBanner(
-                        icon: "terminal.fill",
-                        title: "Install or repair the required tools",
-                        message: checker.unresolvedDependenciesDescription,
-                        tint: MacYTColors.warning
-                    )
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString("brew install yt-dlp ffmpeg", forType: .string)
+                            } label: {
+                                Image(systemName: "doc.on.clipboard.fill")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(MacYTColors.textPrimary)
+                                    .frame(width: 48, height: 48)
+                                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
 
                     HStack(spacing: MacYTSpacing.md) {
-                        commandChip(command: "brew install yt-dlp ffmpeg")
-
-                        Button {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString("brew install yt-dlp ffmpeg", forType: .string)
-                        } label: {
-                            Image(systemName: "doc.on.clipboard.fill")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(MacYTColors.textPrimary)
-                                .frame(width: 48, height: 48)
-                                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        GradientButton(
+                            title: viewModel.appState == .checkingDeps ? "Checking…" : "Re-check tools",
+                            icon: "arrow.clockwise",
+                            isLoading: viewModel.appState == .checkingDeps
+                        ) {
+                            viewModel.recheckDeps()
                         }
-                        .buttonStyle(.plain)
+
+                        if checker.ffmpegStatus.isBroken {
+                            commandChip(command: "brew upgrade ffmpeg x265")
+                        }
                     }
                 }
+                .padding(MacYTSpacing.xxl)
+                .frame(maxWidth: 760)
+                .macYTCard()
 
-                HStack(spacing: MacYTSpacing.md) {
-                    GradientButton(
-                        title: viewModel.appState == .checkingDeps ? "Checking…" : "Re-check tools",
-                        icon: "arrow.clockwise",
-                        isLoading: viewModel.appState == .checkingDeps
-                    ) {
-                        viewModel.recheckDeps()
-                    }
-
-                    if checker.ffmpegStatus.isBroken {
-                        commandChip(command: "brew upgrade ffmpeg x265")
-                    }
-                }
+                Spacer(minLength: MacYTSpacing.md)
             }
-            .padding(MacYTSpacing.xxxl)
-            .frame(maxWidth: 760)
-            .macYTCard()
-
-            Spacer(minLength: MacYTSpacing.xl)
+            .padding(.horizontal, MacYTSpacing.xl)
+            .padding(.vertical, MacYTSpacing.lg)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, MacYTSpacing.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -101,6 +120,16 @@ struct DependencyStatusView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
+    }
+
+    private var diagnosticSubtitle: String {
+        if !checker.coreDependencyInstalled {
+            return "MacYT requires yt-dlp to inspect links and download media. Install it below to get started. FFmpeg is also checked for high-quality audio and video merging."
+        } else if !checker.allRequiredInstalled {
+            return "yt-dlp is installed and ready. FFmpeg was not detected or needs repair. FFmpeg is required for high-resolution stream merging and audio extraction."
+        } else {
+            return "All dependencies are installed and operational. You are ready to inspect and export media."
+        }
     }
 }
 

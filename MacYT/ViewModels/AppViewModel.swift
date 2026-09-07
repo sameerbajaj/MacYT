@@ -22,6 +22,7 @@ class AppViewModel: ObservableObject {
     
     @Published var downloadOptions = DownloadOptions()
     
+    @Published var isInitialLaunch: Bool = true
     var ytdlpService = YTDLPService.shared
     var downloadManager = DownloadManager()
     private var cancellables = Set<AnyCancellable>()
@@ -31,6 +32,7 @@ class AppViewModel: ObservableObject {
 
         Task {
             await DependencyChecker.shared.checkAll()
+            self.isInitialLaunch = false
             updateAppStateAfterDependencyCheck()
         }
     }
@@ -68,15 +70,7 @@ class AppViewModel: ObservableObject {
             do {
                 let info = try await ytdlpService.fetchVideoInfo(url: sanitizedURL)
                 self.videoInfo = info
-                if let requestFormats = info.requestedFormats, !requestFormats.isEmpty {
-                    var filtered = info.formats.filter { f in
-                        f.resolution != "audio only" || requestFormats.contains(where: { $0.formatId == f.formatId })
-                    }
-                    if filtered.isEmpty { filtered = info.formats }
-                    self.formats = filtered.sorted { ($0.tbr ?? 0) > ($1.tbr ?? 0) }
-                } else {
-                    self.formats = info.formats.sorted { ($0.tbr ?? 0) > ($1.tbr ?? 0) }
-                }
+                self.formats = info.formats.sorted { ($0.tbr ?? 0) > ($1.tbr ?? 0) }
                 
                 self.selectedFormatId = self.defaultFormatID()
                 self.appState = .showingFormats
@@ -166,6 +160,11 @@ class AppViewModel: ObservableObject {
         errorMessage = nil
         appState = .ready
         downloadManager.status = .idle
+    }
+
+    func dismissDownloadStatus() {
+        downloadManager.status = .idle
+        errorMessage = nil
     }
 
     private func bindNestedObservableObjects() {
@@ -296,7 +295,8 @@ extension AppViewModel {
             )
         }
 
-        if let directFallback = bestDirectFallback(for: selected) {
+        if !DependencyChecker.shared.ffmpegStatus.isInstalled,
+           let directFallback = bestDirectFallback(for: selected) {
             return VideoSelectionDecision(
                 selectedFormat: selected,
                 effectiveFormat: directFallback,
@@ -366,5 +366,30 @@ extension AppViewModel {
             suffix = "Audio included"
         }
         return "\(decision.selectedFormat.simplifiedQualityLabel) • \(suffix)"
+    }
+
+    var isDownloadActive: Bool {
+        switch downloadManager.status {
+        case .fetching, .downloading, .postProcessing:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var showsFormatStage: Bool {
+        switch appState {
+        case .showingFormats, .downloading, .completed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var exportSelectionSummary: String {
+        if downloadOptions.extractAudio {
+            return "\(downloadOptions.audioFormat.uppercased()) • \(downloadOptions.audioBitrate.label)"
+        }
+        return selectedQualitySummary
     }
 }

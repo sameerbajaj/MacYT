@@ -104,7 +104,9 @@ struct VideoInfoCard: View {
                     } else if phase.error != nil {
                         Rectangle().fill(Color.white.opacity(0.08))
                     } else {
-                        SkeletonThumbnail()
+                        Rectangle()
+                            .fill(Color.white.opacity(0.08))
+                            .shimmerEffect()
                     }
                 }
             } else {

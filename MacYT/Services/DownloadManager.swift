@@ -663,6 +663,26 @@ final class DownloadHistoryStore: ObservableObject {
         }
     }
 
+    func removeRecord(id: String) {
+        records.removeAll { $0.id == id }
+        do {
+            try persist()
+            lastError = nil
+        } catch {
+            lastError = "Could not update MacYT download history."
+        }
+    }
+
+    func clearAll() {
+        records.removeAll()
+        do {
+            try persist()
+            lastError = nil
+        } catch {
+            lastError = "Could not clear MacYT download history."
+        }
+    }
+
     private func persist() throws {
         let fileURL = try historyFileURL()
         let encoder = JSONEncoder()

@@ -82,6 +82,9 @@ struct FormatSelectionView: View {
         .onChange(of: viewModel.formats) { _, _ in
             rebuildFormatCaches()
         }
+        .onChange(of: checker.ffmpegStatus) { _, _ in
+            rebuildFormatCaches()
+        }
     }
 
     private var simpleQualityOptions: [VideoQualityOption] {
@@ -146,8 +149,10 @@ struct FormatSelectionView: View {
 
     private func representativeFormat(from formats: [VideoFormat]) -> VideoFormat? {
         formats.sorted {
-            if $0.isVideoOnly != $1.isVideoOnly {
-                return !$0.isVideoOnly && $1.isVideoOnly
+            if !checker.ffmpegStatus.isInstalled {
+                if $0.isVideoOnly != $1.isVideoOnly {
+                    return !$0.isVideoOnly && $1.isVideoOnly
+                }
             }
 
             if ($0.height ?? 0) == ($1.height ?? 0) {
@@ -267,18 +272,22 @@ private struct SimpleQualityRow: View {
                     Text(option.summaryText)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundColor(MacYTColors.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(option.representative.humanFileSize(duration: duration))
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundColor(MacYTColors.textSecondary)
-                    .frame(width: 110, alignment: .trailing)
+                HStack(spacing: MacYTSpacing.sm) {
+                    Text(option.representative.humanFileSize(duration: duration))
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(MacYTColors.textSecondary)
+                        .frame(minWidth: 65, alignment: .trailing)
 
-                Text(option.representative.displayContainer)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundColor(isSelected ? MacYTColors.textPrimary : MacYTColors.textSecondary)
-                    .frame(width: 60, alignment: .trailing)
+                    Text(option.representative.displayContainer)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundColor(isSelected ? MacYTColors.textPrimary : MacYTColors.textSecondary)
+                        .frame(minWidth: 44, alignment: .trailing)
+                }
             }
             .padding(.horizontal, MacYTSpacing.md)
             .padding(.vertical, MacYTSpacing.md)
@@ -296,7 +305,7 @@ private struct SimpleQualityRow: View {
 
     private var optionBadgeLabel: String {
         if option.needsAudioMerge {
-            if option.hasDirectOption {
+            if !ffmpegInstalled && option.hasDirectOption {
                 return "Auto direct"
             }
             return ffmpegInstalled ? "Merge needed" : "FFmpeg needed"
@@ -307,7 +316,7 @@ private struct SimpleQualityRow: View {
 
     private var optionBadgeTint: Color {
         if option.needsAudioMerge {
-            if option.hasDirectOption {
+            if !ffmpegInstalled && option.hasDirectOption {
                 return MacYTColors.success
             }
             return ffmpegInstalled ? MacYTColors.warning : MacYTColors.destructive
@@ -359,26 +368,22 @@ private struct FormatRow: View {
                         Text("ID \(format.formatId) • \(format.displayCodec)")
                             .font(.system(size: 11, weight: .semibold, design: .monospaced))
                             .foregroundColor(MacYTColors.textTertiary)
+                            .lineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                if emphasis == .technical {
-                    Text(format.displayCodec)
+                HStack(spacing: MacYTSpacing.sm) {
+                    Text(format.humanFileSize(duration: duration))
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundColor(MacYTColors.textSecondary)
-                        .frame(width: 140, alignment: .leading)
+                        .frame(minWidth: 65, alignment: .trailing)
+
+                    Text(format.ext.uppercased())
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundColor(isSelected ? MacYTColors.textPrimary : MacYTColors.textSecondary)
+                        .frame(minWidth: 44, alignment: .trailing)
                 }
-
-                Text(format.humanFileSize(duration: duration))
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundColor(MacYTColors.textSecondary)
-                    .frame(width: 110, alignment: .trailing)
-
-                Text(format.ext.uppercased())
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundColor(isSelected ? MacYTColors.textPrimary : MacYTColors.textSecondary)
-                    .frame(width: 60, alignment: .trailing)
             }
             .padding(.horizontal, MacYTSpacing.md)
             .padding(.vertical, MacYTSpacing.md)

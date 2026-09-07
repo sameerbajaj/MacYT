@@ -17,7 +17,6 @@ struct ShimmerView: View {
                         endPoint: .init(x: 0 + phase, y: 0.5)
                     )
                 )
-                .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
                 .mask(Rectangle())
         }
         .onAppear {

@@ -85,8 +85,14 @@ class DownloadOptions: ObservableObject {
     @Published var audioBitrate: AudioBitratePreset = .best
     @Published var videoContainerPreference: VideoContainerPreference = .auto
     
+    private static let outputDirKey = "MacYT_outputDirectoryPath"
+
     @Published var splitChapters: Bool = false
-    @Published var outputDirectory: URL = DownloadOptions.defaultOutputDirectory()
+    @Published var outputDirectory: URL = DownloadOptions.defaultOutputDirectory() {
+        didSet {
+            UserDefaults.standard.set(outputDirectory.path, forKey: DownloadOptions.outputDirKey)
+        }
+    }
     @Published var filenameTemplate: String = "%(title)s.%(ext)s"
 
     var exportModeTitle: String {
@@ -141,6 +147,13 @@ class DownloadOptions: ObservableObject {
     }
 
     static func defaultOutputDirectory() -> URL {
+        if let savedPath = UserDefaults.standard.string(forKey: outputDirKey), !savedPath.isEmpty {
+            let url = URL(fileURLWithPath: savedPath)
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                return url
+            }
+        }
         let downloadsDirectory = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
         let appDirectory = downloadsDirectory.appendingPathComponent("MacYT", isDirectory: true)
 
