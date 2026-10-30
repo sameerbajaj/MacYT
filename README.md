@@ -2,6 +2,8 @@
 
 A native macOS GUI for yt-dlp. Paste a YouTube link, pick a format, export.
 
+🔗 **Landing Page**: [sameerbajaj.com/tools/macyt](https://sameerbajaj.com/tools/macyt)
+
 If you've been running yt-dlp from the terminal and want a proper macOS app instead, this is it.
 
 ## What it does
@@ -51,9 +53,13 @@ open MacYT.xcodeproj
 
 Build and run the `MacYT` scheme in Xcode. No package manager or extra setup needed.
 
+## Author
+
+Created by [Sameer Bajaj](https://sameerbajaj.com).
+
 ## License
 
-MIT
+[MIT](LICENSE) © 2026 [Sameer Bajaj](https://sameerbajaj.com)
 
 ---
 
