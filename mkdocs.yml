@@ -1,0 +1,15 @@
+site_name: MacYT
+site_url: https://sameerbajaj.com/tools/macyt/
+site_description: Native macOS SwiftUI frontend and desktop wrapper for yt-dlp and FFmpeg.
+site_author: Sameer Bajaj
+repo_url: https://github.com/sameerbajaj/MacYT
+repo_name: sameerbajaj/MacYT
+
+theme:
+  name: mkdocs
+
+nav:
+  - Overview: index.md
+
+extra:
+  canonical_url: https://sameerbajaj.com/tools/macyt/

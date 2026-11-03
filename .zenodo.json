@@ -1,0 +1,24 @@
+{
+  "title": "MacYT: Native macOS SwiftUI GUI and wrapper for yt-dlp and FFmpeg",
+  "description": "<p>Native macOS SwiftUI application and wrapper for yt-dlp and FFmpeg, built by <a href=\"https://sameerbajaj.com\">Sameer Bajaj</a>. Canonical documentation and project hub: <a href=\"https://sameerbajaj.com/tools/macyt/\">https://sameerbajaj.com/tools/macyt/</a>.</p>",
+  "creators": [
+    {
+      "name": "Sameer Bajaj"
+    }
+  ],
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "MIT",
+  "related_identifiers": [
+    {
+      "identifier": "https://sameerbajaj.com/tools/macyt/",
+      "relation": "isDocumentedBy",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/sameerbajaj/MacYT",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}
